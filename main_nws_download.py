@@ -35,11 +35,11 @@ logging.captureWarnings(True)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # Functions for retrieving + preprocessing the latest data
-from .step00_1_Sky_Coverage_Downloading_Preprocessing import get_sky_coverage
-from .step00_2_Precipitation_Probability_Downloading_Preprocessing import get_precip_probability
-from .step00_3_Relative_Humidity_Downloading_Preprocessing import get_relhum_percent
-from .step00_4_Average_Temperature_Downloading_Preprocessing import get_temperature
-from .step00_5_Wind_Speed_and_Direction_Downloading_Preprocessing import get_wind_speed_direction
+from .nws_sky_coverage_download import get_sky_coverage
+from .nws_precipitation_probability_download import get_precip_probability
+from .nws_relative_humidity_download import get_relhum_percent
+from .nws_average_temperature_download import get_temperature
+from .nws_wind_speed_and_direction_download import get_wind_speed_direction
 
 # Helpful functions
 def fig2img(fig):
