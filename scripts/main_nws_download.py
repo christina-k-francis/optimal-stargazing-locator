@@ -112,6 +112,7 @@ def main_download_nws():
     create_nws_gif(skycover_ds, load_cmap("Bmsurface"), 
                    "Percentage of Sky Covered by Clouds", 
                    "Cloud Coverage")
+    logger.info("sky/cloud cover dataset acquired")
     
     # 2. Retrieving and Preprocessing latest Precipitation data
     precip_ds = get_precip_probability()
@@ -119,7 +120,7 @@ def main_download_nws():
     create_nws_gif(precip_ds, load_cmap("LightBluetoDarkBlue_7"),
         "Precipitation Probability (%)",
         "Precipitation Probability")
-    
+    logger.info("precipitation dataset acquired")
     
     # 3. Retrieving and Preprocessing latest Relative Humidity data
     rhum_ds = get_relhum_percent()
@@ -127,9 +128,11 @@ def main_download_nws():
     create_nws_gif(rhum_ds, "pink_r",
         "Relative Humidity (%)",
         "Relative Humidity")
+    logger.info("relative humidity dataset acquired")
     
     # 4. Retrieving and Preprocessing latest Temperature data
     temp_ds = get_temperature()
+    logger.info("temperature dataset acquired")
     # Creating Forecast GIF - requires custom code
     images = []
     cmap = "RdYlBu_r"
