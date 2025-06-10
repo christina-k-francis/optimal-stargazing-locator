@@ -3,9 +3,6 @@ services:
     name: stargazing-index-job
     schedule: "*/360 * * * *"  # Every 6 hours
     env: python
-    plan: starter
     buildCommand: "pip install -r requirements.txt"
     startCommand: "./run_all.sh"
-    envVars:
-      - key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJuZHFpY3hkbGlzZnB4ZmVvZWVyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODc0NDk0MywiZXhwIjoyMDY0MzIwOTQzfQ.zyxFKfyrB-MaKFK5PSGIZtgOosnbJpJkn39RcPGC0sA"
-        sync: false
+    
