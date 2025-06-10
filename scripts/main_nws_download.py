@@ -207,5 +207,5 @@ def main_download_nws():
     wind_ds = get_wind_speed_direction()
     # No plots for this just yet
     
-if __name__ == "__main_download_nws__":
-    main_download_nws()
+# execute the main script:
+main_download_nws()
