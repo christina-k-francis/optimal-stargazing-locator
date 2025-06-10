@@ -441,6 +441,6 @@ def main():
     except:
         logger.exception("Failed to upload dataset")
     logger.info("Done!")
-    
-if __name__ == "__main__":
-    main()
+
+# Let's execute this main function!
+main()
