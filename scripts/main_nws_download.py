@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 logging.captureWarnings(True)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+# silence noisy logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("fsspec").setLevel(logging.WARNING)
+logging.getLogger("supabase").setLevel(logging.WARNING)  
+
 # Functions for retrieving + preprocessing the latest data
 from .nws_sky_coverage_download import get_sky_coverage
 from .nws_precipitation_probability_download import get_precip_probability
