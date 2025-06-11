@@ -57,8 +57,6 @@ def download_and_process_grib(url):
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
-    finally:
-        os.remove(tmp.name)
     
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
     for attempt in range(max_retries):
@@ -101,6 +99,7 @@ def get_sky_coverage():
     
     # Merging datasets
     combined_ds = xr.concat([ds_1thru3_6hr, ds_4thru7], dim="step")
+    gc.collect()
     # sorting data in sequential order
     combined_ds = combined_ds.sortby("valid_time")
 
