@@ -15,6 +15,7 @@ Created on Wed Apr 23 16:51:03 2025
 ###
 
 import os
+import gc
 import requests
 import xarray as xr
 import pandas as pd
@@ -55,6 +56,8 @@ def download_and_process_grib(url):
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
+    finally:
+        os.remove(tmp.name)
     
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
     for attempt in range(max_retries):
@@ -65,6 +68,8 @@ def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retri
                     f,
                     file_options={"content-type": "application/octet-stream",
                                   "upsert": "true"})
+            del f
+            gc.collect()
             return True
         except ssl.SSLError as ssl_err:
             logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
@@ -128,8 +133,10 @@ def get_precip_probability():
                     uploaded = safe_upload(supabase, bucket_name, supabase_path, local_file_path)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
+                    gc.collect()
         
         logger.info('Latest 12-hourly 7-Day Forecast Saved to Cloud!')
         return combined_ds
     except:
         logger.error("Error saving dataset")
+    gc.collect() # garbage collector. deletes objects that are no longer in use

@@ -145,6 +145,8 @@ def get_temperature():
                     uploaded = safe_upload(supabase, bucket_name, supabase_path, local_file_path)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
+                    gc.collect()
+        
         logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
         return combined_ds
     except:
