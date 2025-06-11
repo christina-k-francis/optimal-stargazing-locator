@@ -55,19 +55,20 @@ def load_zarr_from_supabase(bucket, path):
 
 def load_tiff_from_supabase(bucket: str, path: str) -> xr.DataArray:
     file_url = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
-    r = httpx.get(file_url)
-    r.raise_for_status()
+    with httpx.Client() as client:
+        r = client.get(file_url)
+        r.raise_for_status()
     
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
-            tmp.write(r.content)
-            tmp_path = tmp.name  # Save path before closing
-            tmp.flush()
-            
-            da = rioxarray.open_rasterio(tmp_path, masked=True)
-            return da
-    except:
-        logger.exception("geoTIFF download error")
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
+                tmp.write(r.content)
+                tmp_path = tmp.name  # Save path before closing
+                tmp.flush()
+                
+                da = rioxarray.open_rasterio(tmp_path, masked=True)
+                return da
+        except:
+            logger.exception("geoTIFF download error")
         
 
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
@@ -444,3 +445,4 @@ def main():
 
 # Let's execute this main function!
 main()
+import gc; gc.collect() # memory saving function

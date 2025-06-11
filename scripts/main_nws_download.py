@@ -113,6 +113,7 @@ def main_download_nws():
                    "Percentage of Sky Covered by Clouds", 
                    "Cloud Coverage")
     logger.info("sky/cloud cover dataset acquired")
+    del skycover_ds
     
     # 2. Retrieving and Preprocessing latest Precipitation data
     precip_ds = get_precip_probability()
@@ -121,6 +122,7 @@ def main_download_nws():
         "Precipitation Probability (%)",
         "Precipitation Probability")
     logger.info("precipitation dataset acquired")
+    del precip_ds
     
     # 3. Retrieving and Preprocessing latest Relative Humidity data
     rhum_ds = get_relhum_percent()
@@ -129,6 +131,7 @@ def main_download_nws():
         "Relative Humidity (%)",
         "Relative Humidity")
     logger.info("relative humidity dataset acquired")
+    del rhum_ds
     
     # 4. Retrieving and Preprocessing latest Temperature data
     temp_ds = get_temperature()
@@ -203,12 +206,15 @@ def main_download_nws():
         storage_path_prefix, gif_buffer.read(), 
         {"content-type": "image/gif",
          "x-upsert":"true"})
-    
+    gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
+    del temp_ds
     
     # 5. Retrieving and Preprocessing latest Wind data
     wind_ds = get_wind_speed_direction()
+    del wind_ds
     # No plots for this just yet
     
 # execute the main script:
 main_download_nws()
+import gc; gc.collect() # memory saving function
