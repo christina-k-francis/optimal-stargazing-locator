@@ -13,7 +13,6 @@ fonttools
 kiwisolver
 matplotlib==3.10.3
 numpy==2.1.3
-os
 packaging
 pandas
 pillow
@@ -33,10 +32,7 @@ skyfield
 storage3==0.11.3
 supabase
 supafunc==0.9.4
-time
-tempfile
 tzdata
 urllib3
-warnings
 xarray==2025.3.0
 zarr
