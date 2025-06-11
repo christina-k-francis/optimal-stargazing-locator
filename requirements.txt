@@ -32,9 +32,7 @@ skyfield
 storage3==0.11.3
 supabase
 supafunc==0.9.4
-time
 tzdata
 urllib3
-warnings
 xarray==2025.3.0
 zarr
