@@ -20,6 +20,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import io
 import os
+import gc
 import logging
 import warnings
 from supabase import create_client, Client
@@ -48,6 +49,7 @@ def fig2img(fig):
     fig.savefig(buf, format='png')
     buf.seek(0)
     img = Image.open(buf)
+    gc.collect() # garbage collector. deletes objects that are no longer in use
     return img
 
 def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
@@ -114,6 +116,7 @@ def main_download_nws():
                    "Cloud Coverage")
     logger.info("sky/cloud cover dataset acquired")
     del skycover_ds
+    gc.collect() # garbage collector. deletes objects that are no longer in use
     
     # 2. Retrieving and Preprocessing latest Precipitation data
     precip_ds = get_precip_probability()
@@ -123,6 +126,7 @@ def main_download_nws():
         "Precipitation Probability")
     logger.info("precipitation dataset acquired")
     del precip_ds
+    gc.collect() # garbage collector. deletes objects that are no longer in use
     
     # 3. Retrieving and Preprocessing latest Relative Humidity data
     rhum_ds = get_relhum_percent()
@@ -132,6 +136,7 @@ def main_download_nws():
         "Relative Humidity")
     logger.info("relative humidity dataset acquired")
     del rhum_ds
+    gc.collect() # garbage collector. deletes objects that are no longer in use
     
     # 4. Retrieving and Preprocessing latest Temperature data
     temp_ds = get_temperature()
@@ -209,6 +214,7 @@ def main_download_nws():
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     del temp_ds
+    gc.collect() # garbage collector. deletes objects that are no longer in use
     
     # 5. Retrieving and Preprocessing latest Wind data
     wind_ds = get_wind_speed_direction()
@@ -217,4 +223,4 @@ def main_download_nws():
     
 # execute the main script:
 main_download_nws()
-import gc; gc.collect() # memory saving function
+gc.collect() # memory saving function

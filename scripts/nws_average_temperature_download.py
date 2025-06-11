@@ -16,6 +16,7 @@ Created on Thu May 22 18:17:00 2025
 ###
 
 import os
+import gc
 import requests
 import xarray as xr
 import pandas as pd
@@ -56,6 +57,8 @@ def download_and_process_grib(url):
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
+    finally:
+        os.remove(tmp.name)
     
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
     for attempt in range(max_retries):
@@ -65,7 +68,10 @@ def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retri
                     supabase_path,
                     f,
                     file_options={"content-type": "application/octet-stream",
-                                  "upsert": "true"})
+                                  "upsert": "true"
+                                  })
+            del f
+            gc.collect() # garbage collector
             return True
         except ssl.SSLError as ssl_err:
             logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
@@ -143,6 +149,7 @@ def get_temperature():
         return combined_ds
     except:
         logger.error("Saving final dataset failed")
+    gc.collect() # garbage collector. deletes objects that are no longer in use
                     
     
 

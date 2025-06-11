@@ -16,6 +16,7 @@ Created on Sun May 18 16:20:39 2025
 import xarray as xr
 import numpy as np
 import os
+import gc
 import rioxarray
 import pandas as pd
 from skyfield.api import load, wgs84, utc
@@ -62,13 +63,15 @@ def load_tiff_from_supabase(bucket: str, path: str) -> xr.DataArray:
         try:
             with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
                 tmp.write(r.content)
-                tmp_path = tmp.name  # Save path before closing
-                tmp.flush()
+                tmp_path = tmp.name  
+                tmp.flush() # ensures data is written to disk
                 
                 da = rioxarray.open_rasterio(tmp_path, masked=True)
                 return da
         except:
             logger.exception("geoTIFF download error")
+        finally:
+            os.remove(tmp.name) # ensure temp file is deleted
         
 
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
@@ -82,6 +85,8 @@ def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retri
                         "content-type": "application/octet-stream",
                         "upsert": "true"
                     })
+            del f
+            gc.collect() # garbage collector!
             return True
         except ssl.SSLError as ssl_err:
             logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
@@ -445,4 +450,4 @@ def main():
 
 # Let's execute this main function!
 main()
-import gc; gc.collect() # memory saving function
+gc.collect() # memory saving function
