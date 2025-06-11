@@ -57,16 +57,16 @@ def download_and_process_dir_grib(url):
         with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp:
             tmp.write(response.content)
             tmp.flush()  # Ensure data is written before access
+            temp_file_name = tmp.name
             
-            ds = xr.open_dataset(tmp.name, engine="cfgrib",
+            ds = xr.open_dataset(temp_file_name, engine="cfgrib",
                                    backend_kwargs={"indexpath": ""},
                                    decode_timedelta='CFTimedeltaCoder')['wdir10']
+        os.remove(temp_file_name)
         return ds
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
-    finally:
-        os.remove(tmp.name)
     
 def download_and_process_speed_grib(url):
     try:

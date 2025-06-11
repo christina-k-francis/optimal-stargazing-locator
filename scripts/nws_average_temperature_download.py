@@ -49,16 +49,17 @@ def download_and_process_grib(url):
         with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp:
             tmp.write(response.content)
             tmp.flush()  # Ensure data is written before access
+            temp_file_path = tmp.name
             
-            ds = xr.open_dataset(tmp.name, engine="cfgrib",
+            ds = xr.open_dataset(temp_file_path, engine="cfgrib",
                                    backend_kwargs={"indexpath": ""},
-                                   decode_timedelta='CFTimedeltaCoder')['t2m']
+                                   decode_timedelta='CFTimedeltaCoder')['t2m'].load()
+        os.remove(temp_file_path)
         return ds
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
-    finally:
-        os.remove(tmp.name)
+
     
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
     for attempt in range(max_retries):
