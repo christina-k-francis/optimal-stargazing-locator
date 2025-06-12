@@ -76,16 +76,16 @@ def download_and_process_speed_grib(url):
         with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp:
             tmp.write(response.content)
             tmp.flush()  # Ensure data is written before access
+            temp_file_name = tmp.name
             
-            ds = xr.open_dataset(tmp.name, engine="cfgrib",
+            ds = xr.open_dataset(temp_file_name, engine="cfgrib",
                                    backend_kwargs={"indexpath": ""},
                                    decode_timedelta='CFTimedeltaCoder')['si10'].load()
+        os.remove(temp_file_name)
         return ds
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
-    finally:
-        os.remove(tmp.name)
     
 def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
     for attempt in range(max_retries):
@@ -127,7 +127,7 @@ def get_wind_speed_direction():
     matching_idxs = [i for i, t in enumerate(valid_times) if t.hour in desired_hours]
     ds_1thru3_6hr = ds_1thru3.isel(step=matching_idxs)
     
-    # Merging datasets
+    # Merging speed datasets
     speed_ds = xr.concat([ds_1thru3_6hr, ds_4thru7], dim="step")
     # sorting data in sequential order
     speed_ds = speed_ds.sortby("valid_time")
@@ -151,10 +151,11 @@ def get_wind_speed_direction():
     matching_idxs = [i for i, t in enumerate(valid_times) if t.hour in desired_hours]
     ds_1thru3_6hr = ds_1thru3.isel(step=matching_idxs)
 
-    # Merging datasets
+    # Merging direction datasets
     direction_ds = xr.concat([ds_1thru3_6hr, ds_4thru7], dim="step")
     # sorting data in sequential order
     direction_ds = direction_ds.sortby("valid_time")
+    gc.collect() # clean up!
 
     # Aggregating Wind Direction and Wind Speed into a single dataset
     logger.info('Merging Wind Speed and Wind Direction datasets...')
@@ -168,6 +169,7 @@ def get_wind_speed_direction():
     }
     # adding wind direction to wind speed dataset
     speed_ds = speed_ds.assign_coords(direction_coords)
+    gc.collect() # cleaning up some more!
     
     logger.info("Saving Resultant Dataset to Cloud...")
 
