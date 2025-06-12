@@ -112,6 +112,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
          "x-upsert":"true"})
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
+    gc.collect() # cleaning up files that are no longer useful
     
     
 def main_download_nws():
@@ -185,7 +186,7 @@ def main_download_nws():
             cbar.ax.text(1.2, y_pos, f"{c_tick:.0f}°C", va='center',
                          ha='left', transform=cbar.ax.transAxes, fontsize=8)
         fig.subplots_adjust(right=0.85)  # Leave room on the right for the colorbar
-        cbar.set_label("Temperature in Fahrenheit and Celsius", fontsize=9, labelpad=-25)
+        cbar.set_label("Temperature in Fahrenheit and Celsius", fontsize=9, labelpad=-45)
         ax.set_title(f"Temperature on {pd.to_datetime(plotting_data.valid_time.values).strftime('%Y-%m-%d %H:%M UTC')}")
         plt.tight_layout()
         # create gif snapshot
