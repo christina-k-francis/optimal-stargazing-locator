@@ -61,7 +61,7 @@ def download_and_process_dir_grib(url):
             
             ds = xr.open_dataset(temp_file_name, engine="cfgrib",
                                    backend_kwargs={"indexpath": ""},
-                                   decode_timedelta='CFTimedeltaCoder')['wdir10']
+                                   decode_timedelta='CFTimedeltaCoder')['wdir10'].load()
         os.remove(temp_file_name)
         return ds
     except Exception as e:
@@ -79,7 +79,7 @@ def download_and_process_speed_grib(url):
             
             ds = xr.open_dataset(tmp.name, engine="cfgrib",
                                    backend_kwargs={"indexpath": ""},
-                                   decode_timedelta='CFTimedeltaCoder')['si10']
+                                   decode_timedelta='CFTimedeltaCoder')['si10'].load()
         return ds
     except Exception as e:
         logger.error(f"Error: {e}")

@@ -53,7 +53,7 @@ def download_and_process_grib(url):
             
             ds = xr.open_dataset(temp_file_name, engine="cfgrib",
                                    backend_kwargs={"indexpath": ""},
-                                   decode_timedelta='CFTimedeltaCoder')['r2']
+                                   decode_timedelta='CFTimedeltaCoder')['r2'].load()
         
         os.remove(temp_file_name)
         return ds

@@ -85,6 +85,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
         images.append(img)
         plt.close(fig)
         logger.info(f'{time_step+1}/{len(nws_ds.step.values)} GIF frames plotted')
+        gc.collect() # garbage collected at end of gif frame
     # Create GIF of plots/frames using Pillow
     gif_buffer = io.BytesIO()
     images[0].save(gif_buffer, format='GIF', save_all=True,
@@ -110,8 +111,8 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
         {"content-type": "image/gif",
          "x-upsert":"true"})
     gif_buffer.close()
-
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
+    
     
 def main_download_nws():
     # 1. Retrieving and Preprocessing latest Sky Coverage data
@@ -192,6 +193,7 @@ def main_download_nws():
         images.append(img)
         plt.close(fig)
         logger.info(f'{time_step+1}/{len(temp_ds.step.values)} GIF frames plotted')
+        gc.collect() # garbage collected at end of gif frame
         
     # Create GIF of plots/frames using Pillow
     gif_buffer = io.BytesIO()
