@@ -15,15 +15,14 @@ Created on Mon Apr 21 18:24:08 2025
 """
 ###
 
-from supabase import create_client, Client
 import os
 import gc
 import requests
+import httpx
 import xarray as xr
 import pandas as pd
 import tempfile
 import time
-import ssl
 import logging
 
 logging.basicConfig(
@@ -43,42 +42,42 @@ def safe_download(url, max_retries=3):
 
 def download_and_process_grib(url):
     try:
-        response = requests.get(url, timeout=60)
-        response.raise_for_status()
-        # creating a temporary file 
+        # Use a context manager to ensure connection closes
+        with requests.get(url, timeout=60, stream=True) as response:
+            response.raise_for_status()
+            content = response.content  # This loads the full response into memory
+
+        # Now work with the content after closing the connection
         with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp:
-            tmp.write(response.content)
-            tmp.flush()  # Ensure data is written before access
+            tmp.write(content)
+            tmp.flush()
             temp_file_path = tmp.name
-            
-            ds = xr.open_dataset(temp_file_path, engine="cfgrib",
-                                   backend_kwargs={"indexpath": ""},
-                                   decode_timedelta='CFTimedeltaCoder')['unknown'].load()
+
+        ds = xr.open_dataset(temp_file_path, engine="cfgrib",
+                             backend_kwargs={"indexpath": ""},
+                             decode_timedelta='CFTimedeltaCoder')['unknown'].load()
         os.remove(temp_file_path)
         return ds
     except Exception as e:
         logger.error(f"Error: {e}")
         return None
     
-def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            with open(local_file_path, 'rb') as f:
-                supabase.storage.from_(bucket_name).upload( 
-                    supabase_path,
-                    f,
-                    file_options={"content-type": "application/octet-stream",
-                                  "upsert": "true"})
-            del f
-            gc.collect()
+def upload_to_supabase_with_client(client, bucket, path, local_file_path):
+    headers = {
+        "apikey": os.environ["SUPABASE_KEY"],
+        "Authorization": f"Bearer {os.environ['SUPABASE_KEY']}",
+        "Content-Type": "application/octet-stream",
+        "x-upsert": "true"
+    }
+
+    with open(local_file_path, "rb") as f:
+        url = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/{bucket}/{path}"
+        response = client.put(url, content=f, headers=headers)
+        if response.status_code in [200, 201]:
             return True
-        except ssl.SSLError as ssl_err:
-            logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
-            time.sleep(2* (attempt+1))
-        except Exception as e:
-            logger.error(f"Failed to upload {local_file_path}: {e}")
-            break
-    return False
+        else:
+            logger.warning(f"Upload failed: {response.status_code} - {response.text}")
+            return False
 
 def get_sky_coverage():    
     # URLs from NOAA NWS NDFD and grib cloud paths
@@ -107,35 +106,24 @@ def get_sky_coverage():
 
     # Creating zarr file storage path to storage bucket
     logger.info("Saving Resultant Dataset to Cloud...")
-    # Cloud Access
-    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
-    api_key = os.environ['SUPABASE_KEY']
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
     bucket_name = "maps"
     storage_path_prefix = "processed-data/SkyCover_Latest.zarr"
     
-    # Initialize SupaBase Bucket Connection
-    supabase: Client = create_client(database_url, api_key)
-    
-    # write ds to temporary directory
+    # Saving ds to cloud   
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
+            # save ds to temporary file
             zarr_path = f"{tmpdir}/mydata.zarr"
             # save as scalable chunked cloud-optimized zarr file
             combined_ds.to_zarr(zarr_path, mode="w", consolidated=True)
-        
-            # recursively save zarr directories
-            for root, dirs, files in os.walk(zarr_path):
-                for file in files:
-                    local_file_path = os.path.join(root, file)
-                
-                    # Convert local path to relative path for Supabase
-                    relative_path = os.path.relpath(local_file_path, zarr_path)
-                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
-                    
-                    uploaded = safe_upload(supabase, bucket_name, supabase_path, local_file_path)
+            # recursively uploading zarr data
+            with httpx.Client() as client:
+                for root, dirs, files in os.walk(zarr_path):
+                    for file in files:
+                        local_file_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(local_file_path, zarr_path)
+                        supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
+                        uploaded = upload_to_supabase_with_client(client, bucket_name, supabase_path, local_file_path)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
                     gc.collect()
