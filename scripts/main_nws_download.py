@@ -23,6 +23,7 @@ import os
 import gc
 import logging
 import warnings
+import psutil
 from supabase import create_client, Client
 
 logging.basicConfig(
@@ -49,6 +50,12 @@ from .nws_average_temperature_download import get_temperature
 from .nws_wind_speed_and_direction_download import get_wind_speed_direction
 
 # Helpful functions
+def log_memory_usage(stage: str):
+    """Logs the RAM usage (RSS Memory) at it's position in the script"""
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
+    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
+
 def fig2img(fig):
     """Converts a Matplotlib figure to a Pillow image."""
     buf = io.BytesIO()
@@ -85,6 +92,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
         images.append(img)
         plt.close(fig)
         logger.info(f'{time_step+1}/{len(nws_ds.step.values)} GIF frames plotted')
+        log_memory_usage(f"After plotting timestep {time_step+1}")
         gc.collect() # garbage collected at end of gif frame
     # Create GIF of plots/frames using Pillow
     gif_buffer = io.BytesIO()
@@ -104,51 +112,62 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
        
     # Initialize SupaBase Bucket Connection
     supabase: Client = create_client(database_url, api_key)
-
+    log_memory_usage("Before uplpading GIF to supabase")
     # Upload buffer contents to cloud
     supabase.storage.from_(bucket_name).upload( 
         storage_path_prefix, gif_buffer.read(), 
         {"content-type": "image/gif",
          "x-upsert":"true"})
+    log_memory_usage("After uploading GIF to supabase")
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # cleaning up files that are no longer useful
     
     
 def main_download_nws():
+    log_memory_usage("At the Start of main_download_nws")
     # 1. Retrieving and Preprocessing latest Sky Coverage data
     skycover_ds = get_sky_coverage()
+    log_memory_usage(("After importing Sky Cover data"))
     # Creating Forecast GIF
     create_nws_gif(skycover_ds, load_cmap("Bmsurface"), 
                    "Percentage of Sky Covered by Clouds", 
                    "Cloud Coverage")
-    logger.info("sky/cloud cover dataset acquired")
+    log_memory_usage("After creating GIF and Before DEL + Cleanup")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
+    log_memory_usage("After DEL + Cleanup")
     
     # 2. Retrieving and Preprocessing latest Precipitation data
+    log_memory_usage("Before importing Precip. dataset")
     precip_ds = get_precip_probability()
+    log_memory_usage("After importing Precip. Dataset")
     # Creating Forecast GIF
     create_nws_gif(precip_ds, load_cmap("LightBluetoDarkBlue_7"),
         "Precipitation Probability (%)",
         "Precipitation Probability")
-    logger.info("precipitation dataset acquired")
     del precip_ds
+    log_memory_usage("After DEL dataset and Before Cleanup")
     gc.collect() # garbage collector. deletes objects that are no longer in use
+    log_memory_usage("After Garbage Collector Cleanup")
     
     # 3. Retrieving and Preprocessing latest Relative Humidity data
+    log_memory_usage("Before importing Rel. Humidity dataset")
     rhum_ds = get_relhum_percent()
+    log_memory_usage("After importing Rel. Humidity dataset")
     # Creating Forecast GIF
     create_nws_gif(rhum_ds, "pink_r",
         "Relative Humidity (%)",
         "Relative Humidity")
-    logger.info("relative humidity dataset acquired")
+    log_memory_usage("After creating GIF and Before DEL")
     del rhum_ds
+    log_memory_usage("After DEL dataset")
     gc.collect() # garbage collector. deletes objects that are no longer in use
     
     # 4. Retrieving and Preprocessing latest Temperature data
+    log_memory_usage("Before importing Temp. dataset")
     temp_ds = get_temperature()
-    logger.info("temperature dataset acquired")
+    log_memory_usage("After importing Temp. dataset")
     # Creating Forecast GIF - requires custom code
     images = []
     cmap = "RdYlBu_r"
@@ -194,6 +213,7 @@ def main_download_nws():
         images.append(img)
         plt.close(fig)
         logger.info(f'{time_step+1}/{len(temp_ds.step.values)} GIF frames plotted')
+        log_memory_usage("After plotting timestep {time_step+1}")
         gc.collect() # garbage collected at end of gif frame
         
     # Create GIF of plots/frames using Pillow
@@ -214,21 +234,25 @@ def main_download_nws():
        
     # Initialize SupaBase Bucket Connection
     supabase: Client = create_client(database_url, api_key)
-    
+    log_memory_usage("Before uploading GIF to supabase")
     # Upload buffer contents to cloud
     supabase.storage.from_(bucket_name).upload(
         storage_path_prefix, gif_buffer.read(), 
         {"content-type": "image/gif",
          "x-upsert":"true"})
+    log_memory_usage("After uploading GIF to supabase")
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     del temp_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
     
     # 5. Retrieving and Preprocessing latest Wind data
+    log_memory_usage("Before importing Wind datasets")
     wind_ds = get_wind_speed_direction()
+    log_memory_usage("After importing Wind datasets")
     del wind_ds
-    # No plots for this just yet
+    # No official plots for this just yet
+    log_memory_usage("End of main_download_nws")
     
 # execute the main script:
 main_download_nws()
