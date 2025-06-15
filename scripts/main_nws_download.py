@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 logging.captureWarnings(True)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# silence noisy logs
+# silence packages with noisy logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
@@ -213,7 +213,7 @@ def main_download_nws():
         images.append(img)
         plt.close(fig)
         logger.info(f'{time_step+1}/{len(temp_ds.step.values)} GIF frames plotted')
-        log_memory_usage("After plotting timestep {time_step+1}")
+        log_memory_usage(f"After plotting timestep {time_step+1}")
         gc.collect() # garbage collected at end of gif frame
         
     # Create GIF of plots/frames using Pillow
