@@ -215,8 +215,7 @@ def main_download_nws():
         plt.close(fig)
         logger.info(f'{time_step+1}/{len(temp_ds.step.values)} GIF frames plotted')
         log_memory_usage(f"After plotting timestep {time_step+1}")
-        gc.collect() # garbage collected at end of gif frame
-        
+        gc.collect() # garbage collected at end of gif frame  
     # Create GIF of plots/frames using Pillow
     gif_buffer = io.BytesIO()
     images[0].save(gif_buffer, format='GIF', save_all=True,
@@ -244,14 +243,19 @@ def main_download_nws():
     log_memory_usage("After uploading GIF to supabase")
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
-    del temp_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
+    
+    log_memory_usage("After creating GIF, before DEL + Cleanup")
+    del temp_ds
+    gc.collect() # Garbage Collector
+    log_memory_usage("After DEL ds + GC Cleanup")
     
     # 5. Retrieving and Preprocessing latest Wind data
     log_memory_usage("Before importing Wind datasets")
     wind_ds = get_wind_speed_direction()
     log_memory_usage("After importing Wind datasets")
     del wind_ds
+    gc.collect() # RAM Saving Garbage Collector
     # No official plots for this just yet
     log_memory_usage("End of main_download_nws")
     
