@@ -17,6 +17,7 @@ Created on Mon Apr 21 18:24:08 2025
 
 import os
 import gc
+import psutil
 import requests
 import httpx
 import xarray as xr
@@ -30,6 +31,12 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+def log_memory_usage(stage: str):
+    """Logs the RAM usage (RSS Memory) at it's position in the script"""
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
+    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
 
 def safe_download(url, max_retries=3):
     for attempt in range(max_retries):
@@ -109,7 +116,8 @@ def get_sky_coverage():
     bucket_name = "maps"
     storage_path_prefix = "processed-data/SkyCover_Latest.zarr"
     
-    # Saving ds to cloud   
+    # Saving ds to cloud 
+    log_memory_usage("Before recursively saving zarr to Cloud")
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             # save ds to temporary file
@@ -132,6 +140,7 @@ def get_sky_coverage():
         return combined_ds
     except:
         logger.error("Saving final dataset failed")
+    log_memory_usage("After recursively saving zarr to cloud")
     gc.collect()
     
     

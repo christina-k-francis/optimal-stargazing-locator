@@ -17,6 +17,7 @@ Created on Wed May 21 19:57:18 2025
 
 import os
 import gc
+import psutil
 import requests
 import xarray as xr
 import pandas as pd
@@ -31,6 +32,13 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+def log_memory_usage(stage: str):
+    """Logs the RAM usage (RSS Memory) at it's position in the script"""
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
+    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
+
 
 def safe_download(url, max_retries=3):
     for attempt in range(max_retries):
@@ -120,8 +128,10 @@ def get_relhum_percent():
     # Initialize SupaBase Bucket Connection
     supabase: Client = create_client(database_url, api_key)
     
-    # write ds to temporary directory
+    log_memory_usage("Before recursively saving zarr to cloud")
+    # save DS to cloud
     try:
+        # write ds to temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_path = f"{tmpdir}/mydata.zarr"
             # save as scalable chunked cloud-optimized zarr file
@@ -145,4 +155,5 @@ def get_relhum_percent():
         return combined_ds
     except:
         logger.error("Saving final dataset failed")
+    log_memory_usage("After recursively saving zarr to cloud")
     gc.collect()

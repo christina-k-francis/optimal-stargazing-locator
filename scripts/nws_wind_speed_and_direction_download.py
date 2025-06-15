@@ -17,6 +17,7 @@ Created on Thu May 22 19:58:55 2025
 
 import os
 import gc
+import psutil
 import requests
 import xarray as xr
 import pandas as pd
@@ -32,6 +33,13 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+def log_memory_usage(stage: str):
+    """Logs the RAM usage (RSS Memory) at it's position in the script"""
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
+    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
+
 
 def safe_download(url, max_retries=3):
     for attempt in range(max_retries):
@@ -108,6 +116,7 @@ def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retri
     return False
 
 def get_wind_speed_direction():
+    log_memory_usage("Before importing Wind Speed")
     # 1. STARTING WITH WIND SPEED
     # URLs from NOAA NWS NDFD for grib files
     url_days_1thru3 = "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/VP.001-003/ds.wspd.bin"
@@ -120,6 +129,7 @@ def get_wind_speed_direction():
     
     logger.info("Preprocessing data...")
     
+    log_memory_usage("Before preprocess")
     # Getting 6-hourly data
     valid_times = pd.to_datetime(ds_1thru3.valid_time.values)
     # Identify indices where hour is @ 6-hr intervals and use it for subsetting
@@ -131,6 +141,8 @@ def get_wind_speed_direction():
     speed_ds = xr.concat([ds_1thru3_6hr, ds_4thru7], dim="step")
     # sorting data in sequential order
     speed_ds = speed_ds.sortby("valid_time")
+    log_memory_usage("After preprocess, Before Wind Direction import")
+    
     
     #2 NOW, LET'S RETRIEVE WIND DIRECTION
     # URLs from NOAA NWS NDFD for grib files
@@ -144,6 +156,7 @@ def get_wind_speed_direction():
 
     logger.info('Preprocessing Data...')
      
+    log_memory_usage("Before preprocess")
     # Getting 6-hourly data
     valid_times = pd.to_datetime(ds_1thru3.valid_time.values)
     # Identify indices where hour is @ 6-hr intervals and use it for subsetting
@@ -156,19 +169,24 @@ def get_wind_speed_direction():
     # sorting data in sequential order
     direction_ds = direction_ds.sortby("valid_time")
     gc.collect() # clean up!
+    log_memory_usage("After preprocess")
 
     # Aggregating Wind Direction and Wind Speed into a single dataset
     logger.info('Merging Wind Speed and Wind Direction datasets...')
+    log_memory_usage("Before masking datasets")
     masked_speed = np.ma.masked_invalid(speed_ds)
     masked_dir = np.ma.masked_invalid(direction_ds)
+    log_memory_usage("After masking, before calculating u and v dir data")
     # Breaking direction into U and V components
     direction_coords = {
         'direction': (('step','y','x'), direction_ds.data),
         'U': (('step','y','x'), (-masked_speed * np.sin(np.deg2rad(masked_dir)))),
         'V': (('step','y','x'), (-masked_speed * np.cos(np.deg2rad(masked_dir))))
     }
+    log_memory_usage("After u and v calc, before creating Wind DS")
     # adding wind direction to wind speed dataset
     speed_ds = speed_ds.assign_coords(direction_coords)
+    log_memory_usage("After creating Wind DS")
     gc.collect() # cleaning up some more!
     
     logger.info("Saving Resultant Dataset to Cloud...")
@@ -185,8 +203,9 @@ def get_wind_speed_direction():
     # Initialize SupaBase Bucket Connection
     supabase: Client = create_client(database_url, api_key)
     
-    # write ds to temporary directory
+    log_memory_usage("Before recursively saving zarr to cloud")
     try:
+        # write ds to temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_path = f"{tmpdir}/mydata.zarr"
             # save as scalable chunked cloud-optimized zarr file
@@ -210,6 +229,7 @@ def get_wind_speed_direction():
         return speed_ds
     except:
         logger.error("Saving final dataset failed")
+    log_memory_usage("After recursively saving zarr to cloud")
     gc.collect()
                         
 
