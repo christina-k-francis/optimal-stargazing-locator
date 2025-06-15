@@ -47,10 +47,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Helpful functions
 def load_zarr_from_supabase(bucket, path):
     url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
-    fs = fsspec.filesystem("http")
-
-    mapper = fs.get_mapper(url_base)
-    ds = xr.open_zarr(mapper, decode_timedelta='CFTimedeltaCoder')
+    ds = xr.open_zarr(url_base, storage_options={"anon": True}, decode_timedelta='CFTimedeltaCoder')
     return ds
 
 
@@ -449,5 +446,5 @@ def main():
     logger.info("Done!")
 
 # Let's execute this main function!
-main()
-gc.collect() # memory saving function
+#main()
+#gc.collect() # memory saving function
