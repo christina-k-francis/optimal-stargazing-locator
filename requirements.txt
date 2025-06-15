@@ -17,6 +17,7 @@ packaging
 pandas
 pillow
 postgrest==1.0.2
+psutil
 pyparsing
 pypalettes==0.1.5
 pyproj==3.7.1
