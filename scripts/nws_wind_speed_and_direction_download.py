@@ -226,10 +226,11 @@ def get_wind_speed_direction():
                     gc.collect()
                         
         logger.info('Latest 6-hourly 7-Day Forecast of Wind Speed and Direction Saved!')
+        log_memory_usage("After recursively saving zarr to cloud")
+        gc.collect() # deletes datasets that are no longer needed
         return speed_ds
     except:
         logger.error("Saving final dataset failed")
-    log_memory_usage("After recursively saving zarr to cloud")
-    gc.collect()
+    
                         
 

@@ -152,8 +152,9 @@ def get_relhum_percent():
                     gc.collect()
                     
         logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
+        log_memory_usage("After recursively saving zarr to cloud")
+        gc.collect() # clears datasets that are no longer needed
         return combined_ds
     except:
         logger.error("Saving final dataset failed")
-    log_memory_usage("After recursively saving zarr to cloud")
-    gc.collect()
+    

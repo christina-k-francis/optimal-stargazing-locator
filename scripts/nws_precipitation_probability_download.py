@@ -146,8 +146,9 @@ def get_precip_probability():
                     gc.collect()
         
         logger.info('Latest 12-hourly 7-Day Forecast Saved to Cloud!')
+        log_memory_usage("After recursively saving zarr to Cloud")
+        gc.collect() # garbage collector. deletes objects that are no longer in use
         return combined_ds
     except:
         logger.error("Error saving dataset")
-    log_memory_usage("After recursively saving zarr to Cloud")
-    gc.collect() # garbage collector. deletes objects that are no longer in use
+    

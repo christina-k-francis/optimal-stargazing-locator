@@ -17,6 +17,7 @@ Created on Thu May 22 18:17:00 2025
 
 import os
 import gc
+import psutil
 import requests
 import xarray as xr
 import pandas as pd
@@ -31,6 +32,12 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+def log_memory_usage(stage: str):
+    """Logs the RAM usage (RSS Memory) at it's position in the script"""
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
+    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
 
 def safe_download(url, max_retries=3):
     for attempt in range(max_retries):
@@ -127,8 +134,10 @@ def get_temperature():
     # Initialize SupaBase Bucket Connection
     supabase: Client = create_client(database_url, api_key)
     
-    # write ds to temporary directory
+    log_memory_usage("Before recursively saving zarr to Cloud")
+    # save ds to Cloud
     try:
+        # write ds to temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_path = f"{tmpdir}/mydata.zarr"
             # save as scalable chunked cloud-optimized zarr file
@@ -149,10 +158,12 @@ def get_temperature():
                     gc.collect()
         
         logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
+        log_memory_usage("After recursively saving zarr to Cloud")
+        gc.collect() # garbage collector. deletes objects that are no longer in use
         return combined_ds
     except:
         logger.error("Saving final dataset failed")
-    gc.collect() # garbage collector. deletes objects that are no longer in use
+    
                     
     
 

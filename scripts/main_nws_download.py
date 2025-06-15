@@ -127,6 +127,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
 def main_download_nws():
     log_memory_usage("At the Start of main_download_nws")
     # 1. Retrieving and Preprocessing latest Sky Coverage data
+    log_memory_usage("Before importing Sky Cover data")
     skycover_ds = get_sky_coverage()
     log_memory_usage(("After importing Sky Cover data"))
     # Creating Forecast GIF
