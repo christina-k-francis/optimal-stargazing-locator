@@ -16,6 +16,7 @@ Created on Sun May 18 16:20:39 2025
 import xarray as xr
 import numpy as np
 import os
+import psutil
 import gc
 import rioxarray
 import pandas as pd
@@ -24,7 +25,6 @@ import tempfile
 import httpx
 import time
 import ssl
-import fsspec
 import logging
 import warnings
 from supabase import create_client, Client
@@ -45,6 +45,12 @@ logging.captureWarnings(True)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # Helpful functions
+def log_memory_usage(stage: str):
+    """Logs the RAM usage (RSS Memory) at it's position in the script"""
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
+    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
+
 def load_zarr_from_supabase(bucket, path):
     url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
     ds = xr.open_zarr(url_base, storage_options={"anon": True}, decode_timedelta='CFTimedeltaCoder')
@@ -94,7 +100,7 @@ def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retri
     return False
 
 def main():
-    
+    log_memory_usage("At start of main script")
     # 1. IMPORT RELEVANT DATA
     logger.info('Preprocessing meteorological and astronomical data:')
     
@@ -109,10 +115,10 @@ def main():
     
     # 1a. import precipitation probability dataset
     precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
-    
+    log_memory_usage("After importing precip data")
     # 1b. import sky coverage dataset
     skycover_da = load_zarr_from_supabase("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
-    
+    log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
     lightpollution_da = load_tiff_from_supabase("maps",
                         "light-pollution-data/zenith_brightness_v22_2024_ConUSA_deflate2Tiled.tif")
@@ -120,11 +126,13 @@ def main():
     lightpollution_da.rio.write_crs("EPSG:4326", inplace=True)
     lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
     lightpollution_da = lightpollution_da.rename({'x': 'longitude', 'y': 'latitude'})
+    log_memory_usage("After importing light pollution data")
     
     # 1d. Import astronomy data from skyfield
     # Load ephemeris data
     # ephemeris: the calculated positions of a celestial body over time documented in a data file
     eph = load('de421.bsp')
+    log_memory_usage("After importing Ephemeris (e.g. Moon) data")
     moon, earth, sun = eph['moon'], eph['earth'], eph['sun']
     ts = load.timescale()
     # Coarse grid definition
@@ -143,6 +151,7 @@ def main():
     skycover_da_norm = skycover_da_norm.assign_coords(
             latitude=("y", skycover_da_norm.latitude[:, 0].data),
             longitude=("x", skycover_da_norm.longitude[0, :].data))
+    log_memory_usage("After normalizing cloud cover data")
     
     # 3. NORMALIZE PRECIP DATA ON 0-1 SCALE
     # Normalize the precipitation data on a scale (0=no rain, 1=100% Showers)
@@ -178,6 +187,7 @@ def main():
     target_times = skycover_da_norm["valid_time"].values
     target_indx = np.isin(expanded_precip['valid_time'].values, target_times)
     expanded_precip = expanded_precip[target_indx]
+    log_memory_usage("After normalizing precip data")
     
     # 3d. Ensuring that both datasets cover the same forecast datetimes
     common_indx = np.isin(skycover_da_norm['valid_time'].values, expanded_precip['valid_time'].values)
@@ -194,6 +204,7 @@ def main():
     # Desired 6-hourly time steps
     time_steps = skycover_da_norm["valid_time"].values
     
+    log_memory_usage("Before calculating Moon data")
     # Initialize output array
     logger.info("Moon Phase and Altitude")
     moonlight_array = np.zeros((len(time_steps), len(coarse_lats),
@@ -239,7 +250,8 @@ def main():
         longitude=skycover_da_norm.longitude,
         method="linear"
     )
-    
+    log_memory_usage("After calculating Moon data")    
+
     logger.info('Preprocessing high-res light pollution data...')
     # 5. NORMALIZE ARTIFICIAL RADIANCE DATA ON 0-1 SCALE
     # 5a Convert Falchi et. al. thresholds in mcd/m² to mag/arcsec²
@@ -314,6 +326,7 @@ def main():
     lightpollution_3d = lightpollution_3d.assign_coords(
         step=skycover_da_norm['step'],
         valid_time=skycover_da_norm['valid_time'])
+    log_memory_usage("After calculating Light-Pollu. data")
     
     # 6. Calculate the Stargazing Index as the Sum of Weighted Values
     logger.info("Evaluating Stargazing Conditions...")
@@ -335,6 +348,7 @@ def main():
     w_LP = 0.75
     w_moon = 0.3
     
+    log_memory_usage("Before calculating the Stargazing Index")
     # 6a. Evaluating spatiotemporal stargazing conditions!
     stargazing_index = (
         w_cloud * skycover_da_norm +
@@ -353,6 +367,7 @@ def main():
     stargazing_index['valid_time'] = stargazing_index['valid_time'].chunk({})
     if 'chunks' in stargazing_index['valid_time'].encoding:
         del stargazing_index['valid_time'].encoding['chunks']
+    log_memory_usage("After calculating the Stargazing Index")
         
     logger.info('Converting to Letter Grades...')    
     # 6b. Convert Stargazing Indices to Letter Grades
@@ -411,6 +426,7 @@ def main():
     
     # Performing the conversion!
     stargazing_grades = index_to_grade_calc(stargazing_index)
+    log_memory_usage("After comverting indices to letter grades")
     
     # 6c. Merge stargazing indices and letter grades into single dataset
     stargazing_ds = xr.merge([stargazing_index.rename("index"),
@@ -419,6 +435,7 @@ def main():
     
     # 6d. Save Stargazing_Index as zarr file
     logger.info("Uploading Stargazing Evaluation Dataset to Cloud...")
+    log_memory_usage("Before recursively uploading Stargazing ds to Cloud")
     
     # Supabase paths
     bucket_name = "maps"
@@ -441,10 +458,12 @@ def main():
                     uploaded = safe_upload(supabase, bucket_name, supabase_path, local_file_path)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
+            log_memory_usage("After recursively uploading Stargazing ds")
+            logger.info("Done!")
     except:
         logger.exception("Failed to upload dataset")
-    logger.info("Done!")
+    
 
 # Let's execute this main function!
-#main()
-#gc.collect() # memory saving function
+main()
+gc.collect() # memory saving function
