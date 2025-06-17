@@ -25,6 +25,8 @@ import time
 import ssl
 import logging
 from supabase import create_client, Client
+from pathlib import Path
+from mimetypes import guess_type
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,25 +69,50 @@ def download_and_process_grib(url):
         logger.error(f"Error: {e}")
         return None
     
-def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            with open(local_file_path, 'rb') as f:
-                supabase.storage.from_(bucket_name).upload( 
-                    supabase_path,
-                    f,
-                    file_options={"content-type": "application/octet-stream",
-                                  "upsert": "true"})
-            del f
-            gc.collect()
-            return True
-        except ssl.SSLError as ssl_err:
-            logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
-            time.sleep(2* (attempt+1))
-        except Exception as e:
-            logger.error(f"Failed to upload {local_file_path}: {e}")
-            break
-    return False
+def upload_zarr_to_supabase(
+    url: str,
+    api_key: str,
+    bucket_name: str,
+    local_zarr_path: str,
+    remote_prefix: str,
+    overwrite: bool = True
+):
+    """
+    Recursively uploads all files from a local Zarr directory to Supabase Storage.
+
+    Parameters:
+        supabase_url (str): Supabase project URL.
+        supabase_key (str): Supabase service role key.
+        bucket_name (str): Name of the storage bucket.
+        local_zarr_path (str): Path to the local `.zarr` folder.
+        remote_prefix (str): Remote path in the bucket.
+        overwrite (bool): Whether to overwrite existing files. Default is True.
+    """
+    client = create_client(url, api_key)
+    storage = client.storage.from_(bucket_name)
+
+    local_path = Path(local_zarr_path).resolve()
+
+    if not local_path.is_dir():
+        raise ValueError(f"Provided path is not a directory: {local_path}")
+
+    logger.info(f"Uploading contents of {local_path} to Supabase bucket '{bucket_name}' at '{remote_prefix}/'")
+
+    for file_path in local_path.rglob("*"):
+        if file_path.is_file():
+            relative_path = file_path.relative_to(local_path)
+            remote_path = f"{remote_prefix}/{relative_path.as_posix()}"
+
+            mime_type, _ = guess_type(file_path.name)
+            mime_type = mime_type or "application/octet-stream"
+
+            with open(file_path, "rb") as f:
+                try:
+                    storage.upload(remote_path, f, {"content-type": mime_type}, file_options={"upsert": overwrite})
+                    logger.info(f"✅ Uploaded: {remote_path}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to upload {remote_path}: {e}")
+
 
 def get_precip_probability():
     # URLs from NOAA NWS NDFD and grib cloud paths
@@ -114,41 +141,11 @@ def get_precip_probability():
     logger.info("Saving Resultant Dataset to Cloud...")
        
     # Cloud Access
-    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
-    api_key = os.environ['SUPABASE_KEY']
-    bucket_name = "maps"
-    storage_path_prefix = "processed-data/PrecipProb_Latest.zarr"
-       
-    # Initialize SupaBase Bucket Connection
-    supabase: Client = create_client(database_url, api_key)
-    
-    log_memory_usage("Before recursively saving zarr to Cloud")
-    # save DS to cloud
-    try:
-        # first write to temp file
-        with tempfile.TemporaryDirectory() as tmpdir:
-            zarr_path = f"{tmpdir}/mydata.zarr"
-            # save as scalable chunked cloud-optimized zarr file
-            combined_ds.to_zarr(zarr_path, mode="w", consolidated=True)
-        
-            # recursively save zarr directories
-            for root, dirs, files in os.walk(zarr_path):
-                for file in files:
-                    local_file_path = os.path.join(root, file)
-                
-                    # Convert local path to relative path for Supabase
-                    relative_path = os.path.relpath(local_file_path, zarr_path)
-                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
-                    
-                    uploaded = safe_upload(supabase, bucket_name, supabase_path, local_file_path)
-                    if not uploaded:
-                        logger.error(f"Final failure for {relative_path}")
-                    gc.collect()
-        
-        logger.info('Latest 12-hourly 7-Day Forecast Saved to Cloud!')
-        log_memory_usage("After recursively saving zarr to Cloud")
-        gc.collect() # garbage collector. deletes objects that are no longer in use
-        return combined_ds
-    except:
-        logger.error("Error saving dataset")
+    upload_zarr_to_database(
+        url = "https://rndqicxdlisfpxfeoeer.supabase.co",
+        api_key = os.environ['SUPABASE_KEY'],
+        bucket_name = "maps",
+        local_zarr_path = "PrecipProb_Latest.zarr"
+        remote_prefix = "processed-data/PrecipProb_Latest.zarr"
+    )
     
