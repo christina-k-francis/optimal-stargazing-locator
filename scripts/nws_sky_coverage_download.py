@@ -153,7 +153,7 @@ def get_sky_coverage():
     # sorting data in sequential order
     combined_ds = combined_ds.sortby("valid_time")
 
-    # Creating zarr file storage path to storage bucket
+    # Uploading zarr file to storage bucket
     logger.info("Saving Resultant Dataset to Cloud...")
     
     # Saving ds to cloud 
