@@ -121,11 +121,9 @@ def upload_zarr_to_supabase(
                         headers={**headers, "Content-Type": mime_type}
                     )
 
-                    if response.status_code in [200, 201]:
-                        logger.info(f"✅ Uploaded: {supabase_path}")
-                    else:
+                    if response.status_code not in [200, 201]:
                         logger.error(f"❌ Upload failed for {supabase_path}: {response.status_code} - {response.text}")
-                gc.collect()
+               
 
 def get_temperature():
     # URLs from NOAA NWS NDFD for grib files
