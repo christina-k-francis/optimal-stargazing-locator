@@ -54,7 +54,7 @@ def log_memory_usage(stage: str):
 def load_zarr_from_supabase(bucket, path):
     url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
     ds = xr.open_zarr(url_base,  decode_timedelta='CFTimedeltaCoder',
-                      consolidated=False)
+                      consolidated=True)
     return ds
 
 
