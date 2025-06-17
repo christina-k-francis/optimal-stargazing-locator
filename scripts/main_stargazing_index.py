@@ -6,10 +6,10 @@ Created on Sun May 18 16:20:39 2025
 """
 ###
 """
-    This script takes cloud coverage, precipitation probability, and the latest
-    (2024) Artificial Night Sky Brightness data (from David J. Lorenz) to evaluate stargazing 
-    conditions across the continental U.S. The results of the evaluation are
-    expressed as letter grades.
+    This script takes cloud coverage, precipitation probability, moon illumination,
+    moon azimuth, and the latest (2024) Artificial Night Sky Brightness data 
+    (from David J. Lorenz) to evaluate stargazing conditions across the continental U.S. 
+    The results of the evaluation are ultimately expressed as letter grades.
     
 """
 ###
@@ -54,7 +54,7 @@ def log_memory_usage(stage: str):
 def load_zarr_from_supabase(bucket, path):
     url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
     ds = xr.open_zarr(url_base,  decode_timedelta='CFTimedeltaCoder',
-                      consolidated=True)
+                      consolidated=False)
     return ds
 
 
