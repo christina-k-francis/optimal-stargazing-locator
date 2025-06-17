@@ -245,10 +245,9 @@ def get_wind_speed_direction():
                 local_zarr_path = zarr_path,
                 remote_prefix = "processed-data/Wind_Spd_Dir_Latest.zarr"
             )
-        logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
-        log_memory_usage("After recursively saving zarr to cloud")
-        gc.collect()
-        del speed_ds
+            logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
+            log_memory_usage("After recursively saving zarr to cloud")
+            return speed_ds
     except:
         logger.error("Saving final dataset failed")
  

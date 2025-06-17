@@ -175,9 +175,8 @@ def get_temperature():
                 local_zarr_path = zarr_path,
                 remote_prefix = "processed-data/Temp_Latest.zarr"
             )
-        logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
-        log_memory_usage("After recursively saving zarr to cloud")
-        gc.collect()
-        del combined_ds
+            logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
+            log_memory_usage("After recursively saving zarr to cloud")
+            return combined_ds
     except:
         logger.error("Saving final dataset failed")
