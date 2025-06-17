@@ -24,7 +24,7 @@ import pandas as pd
 import tempfile
 import time
 import logging
-from supabase import create_client
+import httpx
 from pathlib import Path
 from mimetypes import guess_type
 
