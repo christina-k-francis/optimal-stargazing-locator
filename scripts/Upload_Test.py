@@ -12,6 +12,7 @@ import time
 import tempfile
 from mimetypes import guess_type
 from supabase import create_client, Client
+import shutil
 
 def safe_upload(supabase, bucket_name, supabase_path,
                 local_file_path, file_type, max_retries=3):
@@ -57,20 +58,23 @@ try:
         zarr_path = f"{tmpdir}/mydata.zarr"
         # save as scalable chunked cloud-optimized zarr file
         temp_da.to_zarr(zarr_path, mode="w", consolidated=True)
+        time.sleep(2) # Gives FS time to flush
     
         # recursively save zarr directories
         for root, dirs, files in os.walk(zarr_path):
             for file in files:
-                local_file_path = os.path.join(root, file)
+                if file.startswith(".") or not file.startswith("."):
+                    _ = os.path.getsize(os.path.join(root, f))  # Access forces flush
+                    local_file_path = os.path.join(root, file)
             
-                # Convert local path to relative path for Supabase
-                relative_path = os.path.relpath(local_file_path, zarr_path)
-                supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
+                    # Convert local path to relative path for Supabase
+                    relative_path = os.path.relpath(local_file_path, zarr_path)
+                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
                 
-                mime_type, _ = guess_type(file)
-                mime_type = mime_type or "application/octet-stream"
+                    mime_type, _ = guess_type(file)
+                    mime_type = mime_type or "application/octet-stream"
                 
-                uploaded = safe_upload(supabase, 
+                    uploaded = safe_upload(supabase, 
                                        "maps", 
                                        supabase_path, 
                                        local_file_path,
