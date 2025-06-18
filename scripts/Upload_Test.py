@@ -12,7 +12,6 @@ import time
 import tempfile
 from mimetypes import guess_type
 from supabase import create_client, Client
-import shutil
 
 def safe_upload(supabase, bucket_name, supabase_path,
                 local_file_path, file_type, max_retries=3):
@@ -64,7 +63,7 @@ try:
         for root, dirs, files in os.walk(zarr_path):
             for file in files:
                 if file.startswith(".") or not file.startswith("."):
-                    _ = os.path.getsize(os.path.join(root, f))  # Access forces flush
+                    _ = os.path.getsize(os.path.join(root, file))  # Access forces flush
                     local_file_path = os.path.join(root, file)
             
                     # Convert local path to relative path for Supabase
