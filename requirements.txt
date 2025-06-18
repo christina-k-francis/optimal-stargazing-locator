@@ -29,6 +29,7 @@ realtime==2.4.3
 requests
 rioxarray==0.18.2
 shapely==2.1.0
+shutil
 skyfield
 storage3==0.11.3
 supabase
