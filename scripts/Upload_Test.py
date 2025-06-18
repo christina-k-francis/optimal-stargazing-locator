@@ -75,7 +75,10 @@ try:
                 
                     mime_type, _ = guess_type(file)
                     mime_type = mime_type or "application/octet-stream"
-                
+                    
+                    print(f"Preparing to upload {file} at {local_file_path}")
+
+                    
                     upload_file_to_supabase_raw(
                         supabase_url=database_url,
                         api_key=api_key,
