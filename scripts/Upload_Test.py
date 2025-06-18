@@ -7,30 +7,33 @@ Created on Wed Jun 18 16:56:59 2025
 import numpy as np
 import xarray as xr
 import os
-import ssl
 import time
 import tempfile
+import httpx
 from mimetypes import guess_type
 from supabase import create_client, Client
 
-def safe_upload(supabase, bucket_name, supabase_path,
-                local_file_path, file_type, max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            with open(local_file_path, 'rb') as f:
-                supabase.storage.from_(bucket_name).upload( 
-                    supabase_path,
-                    f,
-                    file_options={"content-type": file_type,
-                                  "upsert": "true"})
-            return True
-        except ssl.SSLError as ssl_err:
-            print(f"SSL error on attempt {attempt+1}: {ssl_err}")
-            time.sleep(2* (attempt+1))
-        except Exception as e:
-            print(f"Failed to upload {local_file_path}: {e}")
-            break
-    return False  
+def upload_file_to_supabase_raw(supabase_url, api_key, bucket,
+                                supabase_path, local_file_path,
+                                file_type):
+    with open(local_file_path, "rb") as f:
+        headers = {
+            "apikey": api_key,
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": file_type,
+            "x-upsert": "true"
+        }
+
+        response = httpx.put(
+            f"{supabase_url}/storage/v1/object/{bucket}/{supabase_path}",
+            content=f.read(),
+            headers=headers
+        )
+
+        if response.status_code in [200, 201]:
+            print(f"✅ Uploaded: {supabase_path}")
+        else:
+            print(f"❌ Upload failed for {supabase_path}: {response.status_code} - {response.text}") 
 
 np.random.sample(0)
 lat = np.linspace(0, 75, 30)
@@ -73,11 +76,14 @@ try:
                     mime_type, _ = guess_type(file)
                     mime_type = mime_type or "application/octet-stream"
                 
-                    uploaded = safe_upload(supabase, 
-                                       "maps", 
-                                       supabase_path, 
-                                       local_file_path,
-                                       mime_type)
+                    upload_file_to_supabase_raw(
+                        supabase_url=database_url,
+                        api_key=api_key,
+                        bucket="maps",
+                        supabase_path=supabase_path,
+                        local_file_path=local_file_path,
+                        file_type=mime_type
+                    )
         print("Test Complete!")
 except:
     print("upload failed")
