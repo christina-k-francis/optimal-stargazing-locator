@@ -27,6 +27,7 @@ import time
 import ssl
 import logging
 import warnings
+from mimetypes import guess_type
 from supabase import create_client, Client
 
 # Set up logging
@@ -78,74 +79,29 @@ def load_tiff_from_supabase(bucket: str, path: str) -> xr.DataArray:
             os.remove(tmp.name) # ensure temp file is deleted
         
 
-def upload_zarr_to_supabase(
-    url: str,
-    api_key: str,
-    bucket_name: str,
-    local_zarr_path: str,
-    remote_prefix: str,
-    overwrite: bool = True
-):
-    """
-    Recursively uploads all files from local Zarr directory to Supabase
-    using direct HTTP requests
-
-    Parameters:
-        supabase_url (str): Supabase project URL.
-        supabase_key (str): Supabase service role key.
-        bucket_name (str): Name of the storage bucket.
-        local_zarr_path (str): Path to the local `.zarr` folder.
-        remote_prefix (str): Remote path in the bucket.
-        overwrite (bool): Whether to overwrite existing files. Default is True.
-    
-    """
-
-    local_path = Path(local_zarr_path).resolve()
-    if not local_path.is_dir():
-        raise ValueError(f"Provided path is not a directory: {local_path}")
-
-    headers = {
-        "apikey": api_key,
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/octet-stream",
-        "x-upsert": "true" if overwrite else "false"
-    }
-
-    logger.info(f"Uploading contents of {local_path} to Supabase bucket '{bucket_name}' at '{remote_prefix}/'")
-
-    with httpx.Client(timeout=60) as client:
-        for root, dirs, files in os.walk(local_path):
-            for file in files:
-                local_file_path = os.path.join(root, file)
-                relative_path = os.path.relpath(local_file_path, local_path)
-                supabase_path = f"{remote_prefix}/{relative_path.replace(os.sep, '/')}"
-
-                mime_type, _ = guess_type(file)
-                mime_type = mime_type or "application/octet-stream"
-
-                with open(local_file_path, "rb") as f:
-                    response = client.put(
-                        f"{url}/storage/v1/object/{bucket_name}/{supabase_path}",
-                        content=f.read(),
-                        headers={**headers, "Content-Type": mime_type}
-                    )
-
-                    if response.status_code not in [200, 201]:
-                        logger.error(f"❌ Upload failed for {supabase_path}: {response.status_code} - {response.text}")
+def safe_upload(supabase, bucket_name, supabase_path,
+                local_file_path, file_type, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            with open(local_file_path, 'rb') as f:
+                supabase.storage.from_(bucket_name).upload( 
+                    supabase_path,
+                    f,
+                    file_options={"content-type": file_type,
+                                  "upsert": "true"})
+            return True
+        except ssl.SSLError as ssl_err:
+            logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
+            time.sleep(2* (attempt+1))
+        except Exception as e:
+            logger.error(f"Failed to upload {local_file_path}: {e}")
+            break
+    return False
 
 def main():
     log_memory_usage("At start of main script")
     # 1. IMPORT RELEVANT DATA
-    logger.info('Preprocessing meteorological and astronomical data:')
-    
-    # Initialize SupaBase Bucket Connection
-    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
-    api_key = os.environ['SUPABASE_KEY']
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
-    
-    supabase: Client = create_client(database_url, api_key)   
+    logger.info('Preprocessing meteorological and astronomical data:')   
     
     # 1a. import precipitation probability dataset
     precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
@@ -469,6 +425,16 @@ def main():
     
     # 6d. Save Stargazing_Index as zarr file
     logger.info("Uploading Stargazing Evaluation Dataset to Cloud...")
+    # Initialize SupaBase Bucket Connection
+    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
+    api_key = os.environ['SUPABASE_KEY']
+    storage_path_prefix = 'processed-data/Stargazing_Dataset_Latest.zarr'
+    if not api_key:
+        logger.error("Missing SUPABASE_KEY in environment variables.")
+        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    
+    supabase: Client = create_client(database_url, api_key)
+    
     log_memory_usage("Before recursively uploading Stargazing ds to Cloud")
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -476,17 +442,28 @@ def main():
             zarr_path = f"{tmpdir}/mydata.zarr"
             # save as scalable chunked cloud-optimized zarr file
             stargazing_ds.to_zarr(zarr_path, mode="w", consolidated=True)
+            
             # recursively uploading zarr data
-            upload_zarr_to_supabase(
-                url = "https://rndqicxdlisfpxfeoeer.supabase.co",
-                api_key = os.environ['SUPABASE_KEY'],
-                bucket_name = "maps",
-                local_zarr_path = zarr_path,
-                remote_prefix = "processed-data/Stargazing_Dataset_Latest.zarr"
-            )
-            logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
-            log_memory_usage("After recursively saving zarr to cloud")
-            return combined_ds
+            for root, dirs, files in os.walk(zarr_path):
+                for file in files:
+                    local_file_path = os.path.join(root, file)
+                
+                    # Convert local path to relative path for Supabase
+                    relative_path = os.path.relpath(local_file_path, zarr_path)
+                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
+                    
+                    mime_type, _ = guess_type(file)
+                    mime_type = mime_type or "application/octet-stream"
+                    
+                    uploaded = safe_upload(supabase, 
+                                           "maps", 
+                                           supabase_path, 
+                                           local_file_path,
+                                           mime_type)
+                    if not uploaded:
+                        logger.error(f"Final failure for {relative_path}")
+            logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
+            return stargazing_ds
     except:
         logger.error("Saving final dataset failed")
 
