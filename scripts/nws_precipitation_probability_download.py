@@ -126,7 +126,7 @@ def get_precip_probability():
     # Initialize SupaBase Bucket Connection
     supabase: Client = create_client(database_url, api_key)
     
-    # write ds to temporary directory
+    # Save dataset to cloud
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_path = f"{tmpdir}/mydata.zarr"
