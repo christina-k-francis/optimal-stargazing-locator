@@ -35,5 +35,5 @@ supabase
 supafunc==0.9.4
 tzdata
 urllib3
-xarray>=2023.1.0
+xarray==2025.3.0
 zarr==2.18.7
