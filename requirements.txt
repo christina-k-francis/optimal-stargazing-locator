@@ -28,6 +28,7 @@ rasterio==1.4.3
 realtime==2.4.3
 requests
 rioxarray==0.18.2
+scipy
 shapely==2.1.0
 skyfield
 storage3==0.11.3
