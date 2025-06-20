@@ -113,9 +113,9 @@ def main():
     log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
     lightpollution_da = load_tiff_from_supabase("maps",
-                        "light-pollution-data/zenith_brightness_v22_2024_ConUSA_deflate2Tiled.tif")
+                        "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
     # define coordinate system, clip to United States, assign lat and lon xr coords
-    lightpollution_da.rio.write_crs("EPSG:4326", inplace=True)
+    lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
     lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
     lightpollution_da = lightpollution_da.rename({'x': 'longitude', 'y': 'latitude'})
     log_memory_usage("After importing light pollution data")
@@ -455,7 +455,8 @@ def main():
                     supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
                     
                     mime_type, _ = guess_type(file)
-                    mime_type = mime_type or "application/octet-stream"
+                    if mime_type == None:
+                        mime_type = "application/octet-stream"
                     
                     uploaded = safe_upload(supabase, 
                                            "maps", 

@@ -25,6 +25,7 @@ import tempfile
 import time
 import logging
 import ssl
+from mimetypes import guess_type
 from supabase import create_client, Client
 
 logging.basicConfig(
@@ -69,14 +70,15 @@ def download_and_process_grib(url):
         logger.error(f"Error: {e}")
         return None
     
-def safe_upload(supabase, bucket_name, supabase_path, local_file_path, max_retries=3):
+def safe_upload(supabase, bucket_name, supabase_path, 
+                local_file_path, file_type, max_retries=3):
     for attempt in range(max_retries):
         try:
             with open(local_file_path, 'rb') as f:
                 supabase.storage.from_(bucket_name).upload( 
                     supabase_path,
                     f,
-                    file_options={"content-type": "application/octet-stream",
+                    file_options={"content-type": file_type,
                                   "upsert": "true"})
             return True
         except ssl.SSLError as ssl_err:
@@ -141,10 +143,15 @@ def get_relhum_percent():
                     relative_path = os.path.relpath(local_file_path, zarr_path)
                     supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
                     
+                    mime_type, _ = guess_type(file)
+                    if mime_type == None:
+                        mime_type = "application/octet-stream"
+                    
                     uploaded = safe_upload(supabase,
                                            "maps",
                                            supabase_path, 
-                                           local_file_path)
+                                           local_file_path,
+                                           mime_type)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
             logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')

@@ -147,7 +147,8 @@ def get_sky_coverage():
                     supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
                     
                     mime_type, _ = guess_type(file)
-                    mime_type = mime_type or "application/octet-stream"
+                    if mime_type == None:
+                        mime_type = "application/octet-stream"
                     
                     uploaded = safe_upload(supabase, 
                                            "maps", 
