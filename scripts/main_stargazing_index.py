@@ -53,7 +53,7 @@ def log_memory_usage(stage: str):
     logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
 
 def load_zarr_from_supabase(bucket, path):
-    url_base = f"https://{SUPABASE_PROJECT_ID}.supabase.co/storage/v1/object/public/{bucket}/{zarr_path}/"
+    url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}/"
     fs = fsspec.filesystem("http")
     ds = xr.open_zarr(fs.get_mapper(url_base), consolidated=True,
                       decode_timedelta='CFTimedeltaCoder')
