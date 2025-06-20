@@ -156,10 +156,11 @@ def get_sky_coverage():
                                            mime_type)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
+            logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
+            return combined_ds
     except:
         logger.error("Saving final dataset failed")
-    logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
-    return combined_ds
+
     
     
     
