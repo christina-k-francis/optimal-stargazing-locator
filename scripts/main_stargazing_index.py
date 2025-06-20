@@ -25,6 +25,7 @@ import tempfile
 import httpx
 import time
 import ssl
+import fsspec
 import logging
 import warnings
 from mimetypes import guess_type
