@@ -46,6 +46,12 @@ logger = logging.getLogger(__name__)
 logging.captureWarnings(True)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+# silence packages with noisy logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("fsspec").setLevel(logging.WARNING)
+logging.getLogger("supabase").setLevel(logging.WARNING)  
+
 # Helpful functions
 def log_memory_usage(stage: str):
     """Logs the RAM usage (RSS Memory) at it's position in the script"""
