@@ -26,7 +26,7 @@ import logging
 import warnings
 import psutil
 import pathlib
-from supabase import create_client, Client
+from storage3 import SupabaseStorageClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,15 +112,20 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
     bucket_name = "maps"
     storage_path_prefix = f"plots/{data_title}_Latest.gif"
        
-    # Initialize SupaBase Bucket Connection
-    supabase: Client = create_client(database_url, api_key)
+    # Initialize SupaBase Storage Connection
+    storage = SupabaseStorageClient(f"{database_url}/storage/v1", api_key)
+    
     log_memory_usage("Before uplpading GIF to supabase")
+    
     # Upload buffer contents to cloud
-    supabase.storage.from_(bucket_name).upload( 
-        storage_path_prefix, gif_buffer.read(), 
+    storage.from_(bucket_name).upload( 
+        storage_path_prefix, 
+        gif_buffer.read(), 
         {"content-type": "image/gif",
          "x-upsert":"true"})
+    
     log_memory_usage("After uploading GIF to supabase")
+    
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # cleaning up files that are no longer useful
@@ -142,7 +147,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
     
-    supabase: Client = create_client("https://rndqicxdlisfpxfeoeer.supabase.co", api_key)
+    storage = SupabaseStorageClient("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1", api_key)
     bucket_name = "maps"
 
     for i, timestep in enumerate(ds.step.values):
@@ -173,8 +178,9 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                     local_path = pathlib.Path(root) / file
                     
                     with open(local_path, "rb") as f:
-                        supabase.storage.from_(bucket_name).upload(
-                            upload_path, f.read(),
+                        storage.from_(bucket_name).upload(
+                            upload_path, 
+                            f.read(),
                             {"content-type": "image/png", "x-upsert":"true"}
                         )
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
@@ -307,14 +313,19 @@ def main_download_nws():
     storage_path_prefix = "plots/Temp_Latest.gif"
        
     # Initialize SupaBase Bucket Connection
-    supabase: Client = create_client(database_url, api_key)
+    storage = SupabaseStorageClient(f"{database_url}/storage/v1", api_key)
+
     log_memory_usage("Before uploading GIF to supabase")
+
     # Upload buffer contents to cloud
-    supabase.storage.from_(bucket_name).upload(
-        storage_path_prefix, gif_buffer.read(), 
+    storage.from_(bucket_name).upload(
+        storage_path_prefix, 
+        gif_buffer.read(), 
         {"content-type": "image/gif",
          "x-upsert":"true"})
+    
     log_memory_usage("After uploading GIF to supabase")
+    
     gif_buffer.close()
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # garbage collector. deletes objects that are no longer in use

@@ -25,7 +25,7 @@ import time
 import logging
 import ssl
 from mimetypes import guess_type
-from supabase import create_client, Client
+from storage3 import SupabaseStorageClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,14 +68,14 @@ def download_and_process_grib(url):
         logger.error(f"Error: {e}")
         return None
     
-def safe_upload(supabase, bucket_name, supabase_path,
+def safe_upload(storage, bucket_name, supabase_path,
                 local_file_path, file_type, max_retries=3):
     for attempt in range(max_retries):
         try:
             with open(local_file_path, 'rb') as f:
-                supabase.storage.from_(bucket_name).upload( 
+                storage.from_(bucket_name).upload( 
                     supabase_path,
-                    f,
+                    f.read(),
                     file_options={"content-type": file_type,
                                   "upsert": "true"})
             return True
@@ -85,7 +85,7 @@ def safe_upload(supabase, bucket_name, supabase_path,
         except Exception as e:
             logger.error(f"Failed to upload {local_file_path}: {e}")
             break
-    return False         
+    return False                  
 
 def get_precip_probability():
     # URLs from NOAA NWS NDFD and grib cloud paths
@@ -123,8 +123,8 @@ def get_precip_probability():
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
     storage_path_prefix = "processed-data/PrecipProb_Latest.zarr"
        
-    # Initialize SupaBase Bucket Connection
-    supabase: Client = create_client(database_url, api_key)
+    # Initialize Supabase Storage Connection
+    storage = SupabaseStorageClient(f"{database_url}/storage/v1", api_key)
     
     # Save dataset to cloud
     try:
@@ -146,7 +146,7 @@ def get_precip_probability():
                     if mime_type == None:
                         mime_type = "application/octet-stream"
                     
-                    uploaded = safe_upload(supabase, 
+                    uploaded = safe_upload(storage, 
                                            "maps", 
                                            supabase_path, 
                                            local_file_path,
