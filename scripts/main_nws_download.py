@@ -164,7 +164,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
             
             # Save as GeoTIFF with geospatial referencing
-            slice_2d.rio.set_spatial_dims(x_dim="longitude", y_dim="latitude", inplace=True)
+            slice_2d.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
             slice_2d.rio.write_crs("EPSG:4326", inplace=True)
             slice_2d.rio.to_raster(geo_path)
             
