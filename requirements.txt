@@ -34,7 +34,7 @@ shapely==2.1.0
 skyfield
 supabase==2.1.0
 supafunc==0.9.4
-storage3==0.11.3
+storage3==0.4.0
 tzdata
 urllib3
 xarray==2025.3.0
