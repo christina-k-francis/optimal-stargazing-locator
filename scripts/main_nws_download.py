@@ -26,6 +26,7 @@ import logging
 import warnings
 import psutil
 import pathlib
+import tempfile
 from storage3 import create_client
 
 logging.basicConfig(
