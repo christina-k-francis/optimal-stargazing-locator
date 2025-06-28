@@ -142,7 +142,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
     - layer_name (str): New label for the tiles (e.g., "cloud_coverage")
     - supabase_prefix (str): Path prefix inside Supabase bucket
     """
-    logger.info(f"Generating tiles for {layer_name} from {zarr_path}...")
+    logger.info(f"Generating tiles for {layer_name}...")
     
     api_key = os.environ['SUPABASE_KEY']
     if not api_key:
