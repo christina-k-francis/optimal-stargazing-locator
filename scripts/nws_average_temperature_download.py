@@ -26,7 +26,7 @@ import time
 import logging
 import ssl
 from mimetypes import guess_type
-from storage3 import SupabaseStorageClient
+from storage3 import create_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -130,7 +130,7 @@ def get_temperature():
     storage_path_prefix = "processed-data/Temp_Latest.zarr"
        
     # Initialize Supabase Storage Connection
-    storage = SupabaseStorageClient(f"{database_url}/storage/v1", api_key)
+    storage = create_client(f"{database_url}/storage/v1", api_key)
 
     # write ds to temporary directory
     try:
