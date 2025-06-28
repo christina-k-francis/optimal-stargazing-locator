@@ -128,7 +128,9 @@ def get_sky_coverage():
     storage_path_prefix = "processed-data/SkyCover_Latest.zarr"
        
     # Initialize Supabase Storage Connection
-    storage = create_client(f"{database_url}/storage/v1", api_key, is_async=True)
+    storage = create_client(f"{database_url}/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
     
     # write ds to temporary directory
     try:

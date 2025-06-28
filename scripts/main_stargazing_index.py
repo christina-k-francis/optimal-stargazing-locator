@@ -442,7 +442,9 @@ def main():
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
     
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1", api_key)
+    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
     
     log_memory_usage("Before recursively uploading Stargazing ds to Cloud")
     try:

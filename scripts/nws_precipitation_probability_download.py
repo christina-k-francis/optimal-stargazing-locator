@@ -124,7 +124,9 @@ def get_precip_probability():
     storage_path_prefix = "processed-data/PrecipProb_Latest.zarr"
        
     # Initialize Supabase Storage Connection
-    storage = create_client(f"{database_url}/storage/v1", api_key)
+    storage = create_client(f"{database_url}/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
     
     # Save dataset to cloud
     try:

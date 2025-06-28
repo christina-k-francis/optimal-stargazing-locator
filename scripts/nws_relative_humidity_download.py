@@ -125,7 +125,9 @@ def get_relhum_percent():
     storage_path_prefix = "processed-data/RelHum_Latest.zarr"
        
     # Initialize Supabase Storage Connection
-    storage = create_client(f"{database_url}/storage/v1", api_key)
+    storage = create_client(f"{database_url}/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
     
     # write ds to temporary directory
     try:
