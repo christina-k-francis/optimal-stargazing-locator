@@ -168,9 +168,15 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
             slice_2d.rio.write_crs("EPSG:4326", inplace=True)
             slice_2d.rio.to_raster(geo_path)
             
+            # Scale and convert to 8-bit VRT
+            subprocess.run([
+                "gdal_translate", "-of", "VRT", "-ot", "Byte",
+                "-scale", str(geo_path), str(vrt_path)
+            ], check=True)
+    
             # Generate tiles with gdal2tiles
             subprocess.run([
-                "gdal2tiles.py", "-z", "0-6", str(geo_path), str(tile_output_dir)
+                "gdal2tiles.py", "-z", "0-6", str(vrt_path), str(tile_output_dir)
             ], check=True)
             
             # Upload tiles to Supabase
