@@ -161,6 +161,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
         
         with tempfile.TemporaryDirectory() as tmpdir:
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
+            vrt_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.vrt"
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
             
             # Save as GeoTIFF with geospatial referencing
