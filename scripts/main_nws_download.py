@@ -113,7 +113,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
     storage_path_prefix = f"plots/{data_title}_Latest.gif"
        
     # Initialize SupaBase Storage Connection
-    storage = create_client(f"{database_url}/storage/v1", api_key, is_async="True")
+    storage = create_client(f"{database_url}/storage/v1", api_key, is_async=True)
     
     log_memory_usage("Before uplpading GIF to supabase")
     
@@ -147,7 +147,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
     
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1", api_key, is_async="True")
+    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1", api_key, is_async=True)
     bucket_name = "maps"
 
     for i, timestep in enumerate(ds.step.values):
@@ -313,7 +313,7 @@ def main_download_nws():
     storage_path_prefix = "plots/Temp_Latest.gif"
        
     # Initialize SupaBase Bucket Connection
-    storage = create_client(f"{database_url}/storage/v1", api_key, is_async="True")
+    storage = create_client(f"{database_url}/storage/v1", api_key, is_async=True)
 
     log_memory_usage("Before uploading GIF to supabase")
 
