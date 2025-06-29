@@ -133,71 +133,90 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # cleaning up files that are no longer useful
 
-
 def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
     """
     Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
-    
+
     Parameters:
-    - ds (xarray data array): xarray data array map layer
-    - layer_name (str): New label for the tiles (e.g., "cloud_coverage")
-    - supabase_prefix (str): Path prefix inside Supabase bucket
+    - ds (xarray DataArray): 3D xarray DataArray with dimensions [step, y, x]
+    - layer_name (str): Descriptive label for output files (e.g., "cloud_coverage")
+    - supabase_prefix (str): Cloud path prefix for uploaded tiles
     """
     logger.info(f"Generating tiles for {layer_name}...")
-    
-    api_key = os.environ['SUPABASE_KEY']
+
+    api_key = os.environ.get('SUPABASE_KEY')
     if not api_key:
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
-    
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
+
+    storage = create_client(
+        "https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+        {"Authorization": f"Bearer {api_key}"},
+        is_async=False
+    )
     bucket_name = "maps"
 
     for i, timestep in enumerate(ds.step.values):
-        logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
+        logger.info(f"Processing timestep {i + 1}/{len(ds.step.values)}")
+
         slice_2d = ds.isel(step=i)
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
             vrt_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.vrt"
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
-            
-            # Save as GeoTIFF with geospatial referencing
+
+            # Normalize longitude to -180 to 180
+            if slice_2d.longitude.max() > 180:
+                slice_2d = slice_2d.assign_coords(
+                    longitude=(((slice_2d.longitude + 180) % 360) - 180)
+                ).sortby("longitude")
+
+            # Assign spatial dimensions and CRS if not already set
             slice_2d.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
-            slice_2d.rio.write_crs("EPSG:4326", inplace=True)
+            if not slice_2d.rio.crs:
+                slice_2d.rio.write_crs("EPSG:4326", inplace=True)
+
+            # Save to GeoTIFF
             slice_2d.rio.to_raster(geo_path)
-            
+
             # Scale and convert to 8-bit VRT
-            subprocess.run([
-                "gdal_translate", "-of", "VRT", "-ot", "Byte",
-                "-scale", str(geo_path), str(vrt_path)
-            ], check=True)
-    
-            # Generate tiles with gdal2tiles
-            subprocess.run([
-                "gdal2tiles.py", "-z", "0-6", str(vrt_path), str(tile_output_dir)
-            ], check=True)
-            
+            try:
+                subprocess.run([
+                    "gdal_translate", "-of", "VRT", "-ot", "Byte",
+                    "-scale", str(geo_path), str(vrt_path)
+                ], check=True)
+            except subprocess.CalledProcessError as e:
+                logger.error(f"gdal_translate failed: {e}")
+                continue
+
+            # Generate tiles
+            try:
+                subprocess.run([
+                    "gdal2tiles.py", "-z", "0-6", str(vrt_path), str(tile_output_dir)
+                ], check=True)
+            except subprocess.CalledProcessError as e:
+                logger.error(f"gdal2tiles failed: {e}")
+                continue
+
             # Upload tiles to Supabase
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
-            
+
             for root, _, files in os.walk(tile_output_dir):
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
                     upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
                     local_path = pathlib.Path(root) / file
-                    
+
                     with open(local_path, "rb") as f:
                         storage.from_(bucket_name).upload(
-                            upload_path, 
+                            upload_path,
                             f.read(),
-                            {"content-type": "image/png", "x-upsert":"true"}
+                            {"content-type": "image/png", "x-upsert": "true"}
                         )
+
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
             gc.collect()
-    
     
 def main_download_nws():
     log_memory_usage("At the Start of main_download_nws")
