@@ -1,4 +1,4 @@
-beautifulsoup4 
+affine>=2.4.0
 Cartopy==0.24.1
 certifi
 cfgrib==0.9.15.0
