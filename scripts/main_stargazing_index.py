@@ -28,6 +28,7 @@ import ssl
 import fsspec
 import logging
 import warnings
+import affine
 from mimetypes import guess_type
 from storage3 import create_client
 
@@ -105,7 +106,95 @@ def safe_upload(storage, bucket_name, supabase_path,
         except Exception as e:
             logger.error(f"Failed to upload {local_file_path}: {e}")
             break
-    return False          
+    return False   
+
+def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
+    """
+    Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
+    
+    Parameters:
+    - ds (xarray data array): xarray dataset with dimensions [step, y, x]
+    - layer_name (str): Label for the tiles (e.g., "stargazing_grade")
+    - supabase_prefix (str): Path prefix inside Supabase bucket
+    """
+    logger.info(f"Generating tiles for {layer_name}...")
+
+    api_key = os.environ['SUPABASE_KEY']
+    if not api_key:
+        logger.error("Missing SUPABASE_KEY in environment variables.")
+        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    
+    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
+    bucket_name = "maps"
+
+    for i, timestep in enumerate(ds.step.values):
+        logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
+        slice_2d = ds.isel(step=i)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
+            vrt_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.vrt"
+            tile_output_dir = pathlib.Path(tmpdir) / "tiles"
+
+            # Ensure longitude values are in -180 to 180 if necessary
+            if np.nanmax(slice_2d.longitude.values) > 180:
+                slice_2d = slice_2d.assign_coords(
+                    longitude=((slice_2d.longitude + 180) % 360) - 180
+                )
+
+            # Calculate transform from bounds
+            lon_min = np.nanmin(slice_2d.longitude.values)
+            lon_max = np.nanmax(slice_2d.longitude.values)
+            lat_min = np.nanmin(slice_2d.latitude.values)
+            lat_max = np.nanmax(slice_2d.latitude.values)
+
+            height = slice_2d.sizes['y']
+            width = slice_2d.sizes['x']
+
+            transform = affine.Affine(
+                (lon_max - lon_min) / width, 0, lon_min,
+                0, -(lat_max - lat_min) / height, lat_max
+            )
+
+            # Set spatial reference and transform
+            slice_2d.rio.write_transform(transform, inplace=True)
+            slice_2d.rio.write_crs("EPSG:4326", inplace=True)
+
+            # Save as GeoTIFF
+            slice_2d.rio.to_raster(geo_path)
+
+            # Scale to 8-bit VRT
+            subprocess.run([
+                "gdal_translate", "-of", "VRT", "-ot", "Byte",
+                "-scale", str(geo_path), str(vrt_path)
+            ], check=True)
+
+            # Generate tiles with gdal2tiles
+            subprocess.run([
+                "gdal2tiles.py", "-z", "0-6", str(vrt_path), str(tile_output_dir)
+            ], check=True)
+
+            # Upload tiles to Supabase
+            timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
+
+            for root, _, files in os.walk(tile_output_dir):
+                for file in files:
+                    rel_path = pathlib.Path(root).relative_to(tile_output_dir)
+                    upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    local_path = pathlib.Path(root) / file
+
+                    with open(local_path, "rb") as f:
+                        storage.from_(bucket_name).upload(
+                            upload_path,
+                            f.read(),
+                            {"content-type": "image/png", "x-upsert": "true"}
+                        )
+
+            logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
+            gc.collect()
+
 
 def main():
     log_memory_usage("At start of main script")
@@ -478,6 +567,13 @@ def main():
             return stargazing_ds
     except:
         logger.error("Saving final dataset failed")
+
+     # Saving each timestep as a map tile
+    generate_tiles_from_zarr(
+    ds=stargazing_ds,
+    layer_name="stargazing_grade",
+    supabase_prefix="tiles/Stargazing_Tiles")
+    log_memory_usage("After creating tiles for each timestep")
 
 # Let's execute this main function!
 main()
