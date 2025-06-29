@@ -170,7 +170,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
             if slice_2d.longitude.max() > 180:
                 slice_2d = slice_2d.assign_coords(
                     longitude=(((slice_2d.longitude + 180) % 360) - 180)
-                ).sortby("longitude")
+                )
 
             # Assign spatial dimensions and CRS if not already set
             slice_2d.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
