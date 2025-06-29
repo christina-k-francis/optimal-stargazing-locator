@@ -24,27 +24,6 @@ This project combines backend geospatial processing, automated data pipelines, a
 
 ---
 
-## 🛠 Tech Stack & Tools
-
-**Frontend:**
-
-* React + TypeScript
-* Tailwind CSS + shadcn/ui for components
-* Mapbox Studio for visualization of map layers
-
-**Backend & Data Processing:**
-
-* Python 3.11
-* xarray, rioxarray for geospatial data handling
-* GDAL for GeoTIFF processing and tile generation
-* Supabase for file storage and data access
-* Render.com for backend script deployment (cron jobs)
-* Skyfield for astronomical calculations (moon illumination)
-* NWS forecast data
-* 2024 Nighttime Radiance data from D.J. Lorenz
-* 
----
-
 ## 📁 Project Structure
 
 ```
