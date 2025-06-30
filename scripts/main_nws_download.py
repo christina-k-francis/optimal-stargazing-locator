@@ -22,6 +22,7 @@ import cartopy.feature as cfeature
 import io
 import os
 import gc
+import time
 import subprocess
 import logging
 import warnings
@@ -131,6 +132,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
     log_memory_usage("After uploading GIF to supabase")
     
     gif_buffer.close()
+    del gif_buffer
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # cleaning up files that are no longer useful
 
@@ -217,9 +219,14 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                             f.read(),
                             {"content-type": "image/png", "x-upsert": "true"}
                         )
+                    gc.collect() # RAM saver - garbage collector
+                    time.sleep(0.1)  # 100ms pause between tile uploads
 
+            log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
-            gc.collect()
+            del slice_2d
+            gc.collect() # deleting data that's no longer needed
+    gc.collect() # Garbage Collector!
                 
 def main_download_nws():
     log_memory_usage("At the Start of main_download_nws")
@@ -227,11 +234,13 @@ def main_download_nws():
     log_memory_usage("Before importing Sky Cover data")
     skycover_ds = get_sky_coverage()
     log_memory_usage("After importing Sky Cover data")
+    gc.collect # garbage collector. deletes data no longer in use
     # Creating Forecast GIF
     create_nws_gif(skycover_ds, load_cmap("Bmsurface"), 
                    "Percentage of Sky Covered by Clouds", 
                    "Cloud Coverage")
     log_memory_usage("After creating GIF")
+    gc.collect # garbage collector. deletes data no longer in use
     # Saving each timestep as a map tile
     generate_tiles_from_zarr(
     ds=skycover_ds,
@@ -246,10 +255,12 @@ def main_download_nws():
     log_memory_usage("Before importing Precip. dataset")
     precip_ds = get_precip_probability()
     log_memory_usage("After importing Precip. Dataset")
+    gc.collect # garbage collector. deletes data no longer in use
     # Creating Forecast GIF
     create_nws_gif(precip_ds, load_cmap("LightBluetoDarkBlue_7"),
         "Precipitation Probability (%)",
         "Precipitation Probability")
+    gc.collect # garbage collector. deletes data no longer in use
     # Saving each timestep as a map tile
     generate_tiles_from_zarr(
     ds=precip_ds,
@@ -264,11 +275,13 @@ def main_download_nws():
     log_memory_usage("Before importing Rel. Humidity dataset")
     rhum_ds = get_relhum_percent()
     log_memory_usage("After importing Rel. Humidity dataset")
+    gc.collect # garbage collector. deletes data no longer in use
     # Creating Forecast GIF
     create_nws_gif(rhum_ds, "pink_r",
         "Relative Humidity (%)",
         "Relative Humidity")
     log_memory_usage("After creating GIF")
+    gc.collect # garbage collector. deletes data no longer in use
     # Saving each timestep as a map tile
     generate_tiles_from_zarr(
     ds=rhum_ds,
@@ -283,6 +296,7 @@ def main_download_nws():
     log_memory_usage("Before importing Temp. dataset")
     temp_ds = get_temperature()
     log_memory_usage("After importing Temp. dataset")
+    gc.collect # garbage collector. deletes data no longer in use
     # Creating Forecast GIF - requires custom code
     images = []
     cmap = "RdYlBu_r"
@@ -363,10 +377,10 @@ def main_download_nws():
     log_memory_usage("After uploading GIF to supabase")
     
     gif_buffer.close()
+    del gif_buffer
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
-    gc.collect() # garbage collector. deletes objects that are no longer in use
-    
     log_memory_usage("After creating GIF")
+    gc.collect # garbage collector. deletes data no longer in use
     # Saving each timestep as a map tile
     generate_tiles_from_zarr(
     ds=temp_ds,
@@ -381,6 +395,7 @@ def main_download_nws():
     log_memory_usage("Before importing Wind datasets")
     wind_ds = get_wind_speed_direction()
     log_memory_usage("After importing Wind datasets")
+    gc.collect # garbage collector. deletes data no longer in use
     # Saving each timestep as a map tile
     generate_tiles_from_zarr(
     ds=wind_ds,
