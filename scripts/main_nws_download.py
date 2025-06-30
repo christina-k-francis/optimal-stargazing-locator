@@ -245,7 +245,7 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=skycover_ds,
     layer_name="cloud_coverage",
-    supabase_prefix="tiles/SkyCover_Tiles")
+    supabase_prefix="data-layer-tiles/SkyCover_Tiles")
     log_memory_usage("After creating tiles for each timestep")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -265,7 +265,7 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=precip_ds,
     layer_name="precip_probability",
-    supabase_prefix="tiles/PrecipProb_Tiles")
+    supabase_prefix="data-layer-tiles/PrecipProb_Tiles")
     log_memory_usage("After creating tiles for each timestep")
     del precip_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -286,7 +286,7 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=rhum_ds,
     layer_name="rel_humidity",
-    supabase_prefix="tiles/RelHumidity_Tiles")
+    supabase_prefix="data-layer-tiles/RelHumidity_Tiles")
     log_memory_usage("After creating tiles for each timestep")
     del rhum_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -385,7 +385,7 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=temp_ds,
     layer_name="temperature",
-    supabase_prefix="tiles/Temp_Tiles")
+    supabase_prefix="data-layer-tiles/Temp_Tiles")
     log_memory_usage("After creating tiles for each timestep")
     del temp_ds
     gc.collect() # Garbage Collector
@@ -400,7 +400,7 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=wind_ds,
     layer_name="wind_speed_direction",
-    supabase_prefix="tiles/Wind_Tiles")
+    supabase_prefix="data-layer-tiles/Wind_Tiles")
     log_memory_usage("After creating tiles for each timestep")
     del wind_ds
     gc.collect() # RAM Saving Garbage Collector

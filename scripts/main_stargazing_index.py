@@ -191,15 +191,19 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                             f.read(),
                             {"content-type": "image/png", "x-upsert": "true"}
                         )
+                    gc.collect() # RAM saver - garbage collector
+                    time.sleep(0.1)  # 100ms pause between tile uploads
 
+            log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
-            gc.collect()
-
+            del slice_2d
+            gc.collect() # deleting data that's no longer needed
+    gc.collect() # Garbage Collector!
 
 def main():
     log_memory_usage("At start of main script")
     # 1. IMPORT RELEVANT DATA
-    logger.info('Preprocessing meteorological and astronomical data:')   
+    logger.info('Importing meteorological and astronomical data...')   
     
     # 1a. import precipitation probability dataset
     precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
@@ -226,11 +230,13 @@ def main():
     # Coarse grid definition
     coarse_lats = np.linspace(24, 50, 25)  # ~1 degree resolution
     coarse_lons = np.linspace(-125, -66, 30)
+
+    gc.collect # garbage collector. deletes data no longer in use
+    logger.info("Normalizing + Preprocessing Datasets...")
     
     # 2. NORMALIZE SKY COVERAGE DATA ON 0-1 SCALE
     # Normalize the sky coverage data on a scale (0=blue skies, 1=totally cloudy)
     # Ultimately, this negatively contributes to stargazing conditions
-    logger.info("Cloud Cover")
     skycover_da_norm = skycover_da / 100.0
     # 2a. Convert longitudes from 0–360 to -180–180
     skycover_da_norm = skycover_da_norm.assign_coords(
@@ -244,7 +250,6 @@ def main():
     # 3. NORMALIZE PRECIP DATA ON 0-1 SCALE
     # Normalize the precipitation data on a scale (0=no rain, 1=100% Showers)
     # Ultimately, this negatively contributes to stargazing conditions
-    logger.info("Precipitation")
     precip_da_norm = precip_da / 100.0
     
     # 3a Convert longitudes from 0–360 to -180–180
@@ -286,15 +291,16 @@ def main():
     # avoiding duplicate step values
     expanded_precip = expanded_precip.assign_coords(
         step=(skycover_da_norm['step']))
+
+    gc.collect # garbage collector. deletes data no longer in use
     
     # 4. PREPROCESSING MOON ILLUMINATION DATA 
     # 4a. Illumination fraction is already normalized from 0to1
+    log_memory_usage("Before calculating Moon data")
+
     # Desired 6-hourly time steps
     time_steps = skycover_da_norm["valid_time"].values
-    
-    log_memory_usage("Before calculating Moon data")
     # Initialize output array
-    logger.info("Moon Phase and Altitude")
     moonlight_array = np.zeros((len(time_steps), len(coarse_lats),
                                 len(coarse_lons)), dtype=np.float32)
     
@@ -340,7 +346,11 @@ def main():
     )
     log_memory_usage("After calculating Moon data")    
 
+    gc.collect # garbage collector. deletes data no longer in use
+
     logger.info('Preprocessing high-res light pollution data...')
+    log_memory_usage("Before calculating light pollution data")
+
     # 5. NORMALIZE ARTIFICIAL RADIANCE DATA ON 0-1 SCALE
     # 5a Convert Falchi et. al. thresholds in mcd/m² to mag/arcsec²
     falchi_thresholds_mcd = {
@@ -414,7 +424,9 @@ def main():
     lightpollution_3d = lightpollution_3d.assign_coords(
         step=skycover_da_norm['step'],
         valid_time=skycover_da_norm['valid_time'])
-    log_memory_usage("After calculating Light-Pollu. data")
+    log_memory_usage("After calculating/interpolating light pollution data")
+
+    gc.collect # garbage collector. deletes data no longer in use
     
     # 6. Calculate the Stargazing Index as the Sum of Weighted Values
     logger.info("Evaluating Stargazing Conditions...")
@@ -514,12 +526,14 @@ def main():
     
     # Performing the conversion!
     stargazing_grades = index_to_grade_calc(stargazing_index)
-    log_memory_usage("After comverting indices to letter grades")
+    log_memory_usage("After converting indices to letter grades")
     
     # 6c. Merge stargazing indices and letter grades into single dataset
     stargazing_ds = xr.merge([stargazing_index.rename("index"),
                               stargazing_grades.rename("grade_num")],
                              combine_attrs='no_conflicts')
+
+    gc.collect # garbage collector. deletes data no longer in use
     
     # 6d. Save Stargazing_Index as zarr file
     logger.info("Uploading Stargazing Evaluation Dataset to Cloud...")
@@ -531,7 +545,7 @@ def main():
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
     
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+    storage = create_client(f"{database_url}/storage/v1",
                             {"Authorization": f"Bearer {api_key}"},
                             is_async=False)
     
@@ -563,18 +577,23 @@ def main():
                                            mime_type)
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
-            logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
-            return stargazing_ds
+            log_memory_usage("After uploading stargazing ds to cloud")
+        
+        logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
+        
+        # Saving each timestep as a map tile
+        generate_tiles_from_zarr(
+        ds=stargazing_ds,
+        layer_name="stargazing_grade",
+        supabase_prefix="data-layer-tiles/Stargazing_Tiles")
+        
+        log_memory_usage("After creating tiles for each timestep")
+        return stargazing_ds
+
     except:
         logger.error("Saving final dataset failed")
 
-     # Saving each timestep as a map tile
-    generate_tiles_from_zarr(
-    ds=stargazing_ds,
-    layer_name="stargazing_grade",
-    supabase_prefix="tiles/Stargazing_Tiles")
-    log_memory_usage("After creating tiles for each timestep")
-
+    
 # Let's execute this main function!
 main()
 gc.collect() # memory saving function
