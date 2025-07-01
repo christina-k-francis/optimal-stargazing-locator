@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: stargazing-tile-server
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python tile_server.py"
+    envVars:
+      - key: SUPABASE_KEY
+        sync: false
