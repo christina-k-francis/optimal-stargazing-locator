@@ -3,8 +3,8 @@ services:
     name: stargazing-tile-server
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python tile_server.py"
+    buildCommand: "cd tile_server && pip install -r requirements.txt"
+    startCommand: "cd tile_server && python tile_server.py"
     envVars:
       - key: SUPABASE_KEY
         sync: false
