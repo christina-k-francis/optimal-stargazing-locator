@@ -395,16 +395,10 @@ def main_download_nws():
     log_memory_usage("Before importing Wind datasets")
     wind_ds = get_wind_speed_direction()
     log_memory_usage("After importing Wind datasets")
-    gc.collect # garbage collector. deletes data no longer in use
-    # Saving each timestep as a map tile
-    generate_tiles_from_zarr(
-    ds=wind_ds,
-    layer_name="wind_speed_direction",
-    supabase_prefix="data-layer-tiles/Wind_Tiles")
-    log_memory_usage("After creating tiles for each timestep")
+    # Map tile generation not needed (yet)
+    # GIF generation not needed (yet)
     del wind_ds
     gc.collect() # RAM Saving Garbage Collector
-    # No official plots for this just yet
     log_memory_usage("End of main_download_nws")
     
 # execute the main script:
