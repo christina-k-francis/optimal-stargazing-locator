@@ -192,7 +192,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                             {"content-type": "image/png", "x-upsert": "true"}
                         )
                     gc.collect() # RAM saver - garbage collector
-                    time.sleep(0.1)  # 100ms pause between tile uploads
+                    time.sleep(0.025)  # 25ms pause between tile uploads
 
             log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
