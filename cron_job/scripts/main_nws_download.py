@@ -136,7 +136,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # cleaning up files that are no longer useful
 
-def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
+def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
     """
     Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
     
@@ -220,7 +220,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                             {"content-type": "image/png", "x-upsert": "true"}
                         )
                     gc.collect() # RAM saver - garbage collector
-                    time.sleep(0.05)  # 50ms pause between tile uploads
+                    time.sleep(sleep_secs)  # 50ms = 0.05sec pause between tile uploads
 
             log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
@@ -230,6 +230,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                 
 def main_download_nws():
     log_memory_usage("At the Start of main_download_nws")
+    
     # 1. Retrieving and Preprocessing latest Sky Coverage data
     log_memory_usage("Before importing Sky Cover data")
     skycover_ds = get_sky_coverage()
@@ -245,7 +246,8 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=skycover_ds,
     layer_name="cloud_coverage",
-    supabase_prefix="data-layer-tiles/SkyCover_Tiles")
+    supabase_prefix="data-layer-tiles/SkyCover_Tiles",
+    sleep_secs=0.035)
     log_memory_usage("After creating tiles for each timestep")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -265,7 +267,8 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=precip_ds,
     layer_name="precip_probability",
-    supabase_prefix="data-layer-tiles/PrecipProb_Tiles")
+    supabase_prefix="data-layer-tiles/PrecipProb_Tiles",
+    sleep_secs=0.035)
     log_memory_usage("After creating tiles for each timestep")
     del precip_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -286,7 +289,8 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=rhum_ds,
     layer_name="rel_humidity",
-    supabase_prefix="data-layer-tiles/RelHumidity_Tiles")
+    supabase_prefix="data-layer-tiles/RelHumidity_Tiles",
+    sleep_secs=0.035)
     log_memory_usage("After creating tiles for each timestep")
     del rhum_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -350,7 +354,6 @@ def main_download_nws():
                    append_images=images[1:], duration=350, loop=0)
     # Seek to the beginning so it can be read from there
     gif_buffer.seek(0)
-    
     # Cloud Access
     database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
     api_key = os.environ['SUPABASE_KEY']
@@ -359,23 +362,18 @@ def main_download_nws():
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
     bucket_name = "maps"
     storage_path_prefix = "plots/Temp_Latest.gif"
-       
     # Initialize SupaBase Bucket Connection
     storage = create_client(f"{database_url}/storage/v1",
                             {"Authorization": f"Bearer {api_key}"},
                             is_async=False)
-
     log_memory_usage("Before uploading GIF to supabase")
-
     # Upload buffer contents to cloud
     storage.from_(bucket_name).upload(
         storage_path_prefix, 
         gif_buffer.read(), 
         {"content-type": "image/gif",
          "x-upsert":"true"})
-    
     log_memory_usage("After uploading GIF to supabase")
-    
     gif_buffer.close()
     del gif_buffer
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
@@ -385,7 +383,8 @@ def main_download_nws():
     generate_tiles_from_zarr(
     ds=temp_ds,
     layer_name="temperature",
-    supabase_prefix="data-layer-tiles/Temp_Tiles")
+    supabase_prefix="data-layer-tiles/Temp_Tiles",
+    sleep_secs=0.06)
     log_memory_usage("After creating tiles for each timestep")
     del temp_ds
     gc.collect() # Garbage Collector
