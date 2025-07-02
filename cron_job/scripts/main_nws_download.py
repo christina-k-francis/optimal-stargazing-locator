@@ -290,7 +290,7 @@ def main_download_nws():
     ds=rhum_ds,
     layer_name="rel_humidity",
     supabase_prefix="data-layer-tiles/RelHumidity_Tiles",
-    sleep_secs=0.035)
+    sleep_secs=0.045)
     log_memory_usage("After creating tiles for each timestep")
     del rhum_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
