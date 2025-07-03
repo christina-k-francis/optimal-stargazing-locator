@@ -578,17 +578,21 @@ def main():
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
             log_memory_usage("After uploading stargazing ds to cloud")
-        
-        logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
-        
-        # Saving each timestep as a map tile
-        generate_tiles_from_zarr(
-        ds=stargazing_ds,
-        layer_name="stargazing_grade",
-        supabase_prefix="data-layer-tiles/Stargazing_Tiles")
-        
-        log_memory_usage("After creating tiles for each timestep")
-        return stargazing_ds
+            logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
+
+            try:
+                # Saving each timestep as a map tile
+                generate_tiles_from_zarr(
+                ds=stargazing_ds,
+                layer_name="stargazing_grade",
+                supabase_prefix="data-layer-tiles/Stargazing_Tiles")
+            except Exception as tile_err:
+                logger.error(f"Tile generation failed: {tile_err}")
+                raise # ensure main catches the error
+
+            log_memory_usage("After creating tiles for each timestep")
+            logger.info("Stargazing DS tiles uploaded successfully!")
+            return stargazing_ds
 
     except:
         logger.error("Saving final dataset failed")
