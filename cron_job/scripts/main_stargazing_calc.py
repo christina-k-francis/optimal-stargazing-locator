@@ -93,7 +93,7 @@ def load_tiff_from_supabase(bucket: str, path: str) -> xr.DataArray:
 
 def safe_upload(storage, bucket_name, supabase_path,
                 local_file_path, file_type, max_retries=3):
-    for attempt in range(max_retries):
+    for attempt in range(1, max_retries + 1):
         try:
             with open(local_file_path, 'rb') as f:
                 storage.from_(bucket_name).upload( 
@@ -101,14 +101,22 @@ def safe_upload(storage, bucket_name, supabase_path,
                     f.read(),
                     file_options={"content-type": file_type,
                                   "upsert": "true"})
-            return True
+            return True  # Success!
+
         except ssl.SSLError as ssl_err:
-            logger.error(f"SSL error on attempt {attempt+1}: {ssl_err}")
-            time.sleep(2* (attempt+1))
+            logger.error(f"SSL error on attempt {attempt}: {ssl_err}", exc_info=True)
+        
         except Exception as e:
-            logger.error(f"Failed to upload {local_file_path}: {e}")
-            break
-    return False   
+            logger.error(f"Upload attempt {attempt} failed for {local_file_path}: {e}", exc_info=True)
+        
+        # Wait before retrying (exponential backoff)
+        sleep_time = 2 * attempt
+        logger.info(f"Retrying upload in {sleep_time} seconds...")
+        time.sleep(sleep_time)
+
+    logger.error(f"Final failure after {max_retries} attempts for {local_file_path}")
+    return False
+  
 
 def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
     """
@@ -578,7 +586,7 @@ def main():
                                            local_file_path,
                                            mime_type)
                     if not uploaded:
-                        logger.error(f"Final failure for {relative_path}")
+                        logger.error(f"Final failure for {relative_path}", exc_info=True)
             log_memory_usage("After uploading stargazing ds to cloud")
             logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
 
@@ -589,7 +597,7 @@ def main():
                 layer_name="stargazing_grade",
                 supabase_prefix="data-layer-tiles/Stargazing_Tiles")
             except Exception as tile_err:
-                logger.error(f"Tile generation failed: {tile_err}")
+                logger.error(f"Tile generation failed: {tile_err}", exc_info=True)
                 raise # ensure main catches the error
 
             log_memory_usage("After creating tiles for each timestep")
@@ -597,7 +605,7 @@ def main():
             return stargazing_ds
 
     except:
-        logger.error("Saving final dataset failed")
+        logger.error("Saving final dataset failed", exc_info=True)
 
     
 # Let's execute this main function!
