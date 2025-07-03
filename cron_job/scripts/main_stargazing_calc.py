@@ -30,6 +30,7 @@ import logging
 import warnings
 import affine
 import pathlib
+import subprocess
 from mimetypes import guess_type
 from storage3 import create_client
 
