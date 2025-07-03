@@ -29,6 +29,7 @@ import fsspec
 import logging
 import warnings
 import affine
+import pathlib
 from mimetypes import guess_type
 from storage3 import create_client
 
