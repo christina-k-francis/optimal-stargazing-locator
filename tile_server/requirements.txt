@@ -1,4 +1,6 @@
 fastapi==0.110.1
-uvicorn[standard]==0.29.0
-storage3==0.6.0
+httpx
 requests==2.31.0
+storage3==0.6.0
+uvicorn[standard]==0.29.0
+

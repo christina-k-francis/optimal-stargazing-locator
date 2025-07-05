@@ -13,7 +13,9 @@ Created on Sat June 28 18:24:00 2025
 """
 ###
 import os
+import httpx
 from fastapi import FastAPI, Response, HTTPException
+from fastapi.responses import StreamingResponse
 import logging
 from storage3 import create_client
 from pathlib import Path
@@ -57,32 +59,38 @@ LAYER_PATHS = {
 def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
     """Serve tile from cache or Supabase, fallback to blank tile if missing."""
     if layer not in LAYER_PATHS:
-        raise HTTPException(status_code=404, detail="Layer not found")
+        return HTTPException(status_code=404, detail="Layer not found")
 
-    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{y}.png"
+    local_path = CACHE_DIR / layer / str(timestamp) / str(z) / str(x) / f"{y}.png"
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Serve from local cache if it exists
     if local_path.exists():
-        return Response(content=local_path.read_bytes(), media_type="image/png")
+        return StreamingResponse(open(local_path, "rb"), media_type="image/png")
 
+    # Attempt to download tile from supabase storage
     supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{y}.png"
     try:
         tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
         if tile_data:
             with open(local_path, "wb") as f:
                 f.write(tile_data)
-            return Response(content=tile_data, media_type="image/png")
+            return StreamingResponse(open(local_path, "rb"), media_type="image/png")
         else:
             raise Exception("Tile not found in Supabase")
 
     except Exception as e:
         logger.warning(f"Tile missing ({supabase_path}): {e}")
-        blank_tile = requests.get(blank_tile_url)
-        if blank_tile.status_code == 200:
-            return Response(content=blank_tile.content, media_type="image/png")
-        else:
-            logger.error(f"Failed to fetch blank tile. Status code: {blank_tile.status_code}")
-            raise HTTPException(status_code=500, detail="Tile unavailable")
+
+    # serve blank tile in place of missing data
+    try:
+        with httpx.stream("GET", blank_tile_url) as r:
+            r.raise_for_status()
+            return StreamingResponse(r.iter_bytes(), media_type="image/png")
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch blank tile: {e}")
+        return Response(status_code=500, content="Tile and fallback missing")
 
 
 @app.get("/health")
