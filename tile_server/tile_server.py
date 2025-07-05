@@ -70,8 +70,18 @@ CACHE_EXPIRY_SECONDS = 12 * 3600  # 12 hours
 
 # --- Tile Serving Endpoint --------------------------------------------------------------------
 
+@app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
+async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
+    tile_path = f"your_tile_directory/{layer}/{ts}/{z}/{x}/{y}.png"
+
+    if os.path.exists(tile_path):
+        return Response(status_code=200)
+    else:
+        return Response(status_code=404)
+    
+
 @app.get("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
-def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
+async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
     """Serve tile from cache or Supabase, fallback to blank tile if missing."""
     
     if layer not in LAYER_PATHS:
