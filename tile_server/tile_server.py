@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# CORS setup
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For testing/dev, allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Supabase storage configuration
 SUPABASE_URL = "https://rndqicxdlisfpxfeoeer.supabase.co"
 BUCKET_NAME = "maps"
