@@ -69,15 +69,6 @@ CACHE_DIR.mkdir(exist_ok=True)
 CACHE_EXPIRY_SECONDS = 12 * 3600  # 12 hours
 
 # --- Tile Serving Endpoint --------------------------------------------------------------------
-
-@app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
-async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
-    tile_path = f"tiles/{layer}/{ts}/{z}/{x}/{y}.png"
-
-    if os.path.exists(tile_path):
-        return Response(status_code=200)
-    else:
-        return Response(status_code=404)
     
 
 @app.get("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
@@ -110,6 +101,14 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
     # Serve blank tile in place of missing data (also cache it locally)
     return serve_blank_tile(local_path)
 
+@app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
+async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
+    tile_path = f"tiles/{layer}/{ts}/{z}/{x}/{y}.png"
+
+    if os.path.exists(tile_path):
+        return Response(status_code=200)
+    else:
+        return Response(status_code=404)
 
 def serve_blank_tile(cache_path: Path):
     """Fetches and serves the blank transparent tile """
