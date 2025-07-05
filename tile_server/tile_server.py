@@ -72,7 +72,7 @@ CACHE_EXPIRY_SECONDS = 12 * 3600  # 12 hours
 
 @app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
 async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
-    tile_path = f"your_tile_directory/{layer}/{ts}/{z}/{x}/{y}.png"
+    tile_path = f"tiles/{layer}/{ts}/{z}/{x}/{y}.png"
 
     if os.path.exists(tile_path):
         return Response(status_code=200)
