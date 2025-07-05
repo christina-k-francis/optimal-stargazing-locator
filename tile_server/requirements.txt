@@ -1,3 +1,4 @@
-flask==3.0.3
-storage3==0.7.0
-gunicorn==22.0.0
+fastapi==0.110.1
+uvicorn[standard]==0.29.0
+storage3==0.6.0
+requests==2.31.0
