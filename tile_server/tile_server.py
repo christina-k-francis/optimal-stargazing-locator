@@ -103,11 +103,28 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
 
 @app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
 async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
-    tile_path = f"tiles/{layer}/{ts}/{z}/{x}/{y}.png"
+    """Checks tile existence in cache or Supabase storage """
+    
+    if layer not in LAYER_PATHS:
+        return Response(status_code=404)
 
-    if os.path.exists(tile_path):
+    # local cache path
+    local_path = CACHE_DIR / layer / ts / str(z) / str(x) / f"{y}.png"
+
+    if local_path.exists():
         return Response(status_code=200)
+    
     else:
+        # Attempt to check Supabase without downloading full file
+        supabase_path = f"{LAYER_PATHS[layer]}/{ts}/{z}/{x}/{y}.png"
+        try:
+            # Attempt to download metadata (HEAD isn't supported directly by Supabase Storage3)
+            tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
+            if tile_data:
+                return Response(status_code=200)
+        except Exception as e:
+            logger.info(f"Tile not found in Supabase: {supabase_path} | {e}")
+
         return Response(status_code=404)
 
 def serve_blank_tile(cache_path: Path):
