@@ -20,7 +20,8 @@ import psutil
 import gc
 import rioxarray
 import pandas as pd
-from skyfield.api import load, wgs84, utc
+from skyfield.api import load, wgs84
+import pytz
 import tempfile
 import httpx
 import time
@@ -308,6 +309,8 @@ def main():
     # 4a. Illumination fraction is already normalized from 0to1
     log_memory_usage("Before calculating Moon data")
 
+    # Mountain Time zone - NWS data is in MT
+    mountain_tz = pytz.timezone("US/Mountain")
     # Desired 6-hourly time steps
     time_steps = skycover_da_norm["valid_time"].values
     # Initialize output array
@@ -316,9 +319,11 @@ def main():
     
     # Calculate Moon Illumination over coarse grid
     for i, datetime in enumerate(time_steps):
-        # ensure datetime is time-zone aware + skyfield compatible
-        aware_dt = pd.to_datetime(datetime).replace(tzinfo=utc)
-        t_sf = ts.utc(aware_dt)
+        # Timestamps are in Mountain Time but naive — explicitly localize as Mountain Time
+        aware_dt_mt = pd.to_datetime(datetime).tz_localize(mountain_tz)
+        # Convert to Skyfield compatible UTC
+        aware_dt_utc = aware_dt_mt.astimezone(pytz.UTC)
+        t_sf = ts.utc(aware_dt_utc)
     
         for lat_i, lat in enumerate(coarse_lats):
             for lon_j, lon in enumerate(coarse_lons):

@@ -19,6 +19,7 @@ from pypalettes import load_cmap
 from PIL import Image
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import pytz
 import io
 import os
 import gc
@@ -53,6 +54,9 @@ from .nws_precipitation_probability_download import get_precip_probability
 from .nws_relative_humidity_download import get_relhum_percent
 from .nws_average_temperature_download import get_temperature
 from .nws_wind_speed_and_direction_download import get_wind_speed_direction
+
+# All NWS data is in Mountain Time
+mountain_tz = pytz.timezone("US/Mountain")
 
 # Helpful functions
 def log_memory_usage(stage: str):
@@ -91,7 +95,8 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
         plt.clim([0,100]) 
         plt.colorbar(ax=ax, orientation='vertical', pad=0.1,
                      label=f'{cbar_label}', extend='neither', ticks=ticks) 
-        ax.set_title(f"{data_title} on {pd.to_datetime(plotting_data.valid_time.values).strftime('%Y-%m-%d %H:%M UTC')}")
+        local_dt = pd.to_datetime(plotting_data.valid_time.values).tz_localize(mountain_tz)
+        ax.set_title(f"{data_title} on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
         # create gif snapshot
         img = fig2img(fig)
         images.append(img)
@@ -340,7 +345,8 @@ def main_download_nws():
                          ha='left', transform=cbar.ax.transAxes, fontsize=8)
         fig.subplots_adjust(right=0.85)  # Leave room on the right for the colorbar
         cbar.set_label("Temperature in Fahrenheit and Celsius", fontsize=9, labelpad=-45)
-        ax.set_title(f"Temperature on {pd.to_datetime(plotting_data.valid_time.values).strftime('%Y-%m-%d %H:%M UTC')}")
+        local_dt = pd.to_datetime(plotting_data.valid_time.values).tz_localize(mountain_tz)
+        ax.set_title(f"Temperature on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
         plt.tight_layout()
         # create gif snapshot
         img = fig2img(fig)
