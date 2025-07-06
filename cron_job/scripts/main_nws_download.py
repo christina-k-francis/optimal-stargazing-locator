@@ -188,7 +188,8 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
 
             # Set spatial reference and transform
             slice_2d.rio.write_transform(transform, inplace=True)
-            slice_2d.rio.write_crs("EPSG:4326", inplace=True)
+            slice_2d.rio.write_crs("EPSG:4326", inplace=True) # assigning true coordinate system
+            slice_2d = slice_2d.rio.reproject("EPSG:3857") # projecting into web mercator
 
             # Save as GeoTIFF
             slice_2d.rio.to_raster(geo_path)
