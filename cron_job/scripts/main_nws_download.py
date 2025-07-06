@@ -202,7 +202,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
 
             # Generate tiles with gdal2tiles
             subprocess.run([
-                "gdal2tiles.py", "-z", "0-4", str(vrt_path), str(tile_output_dir)
+                "gdal2tiles.py", "-z", "0-10", str(vrt_path), str(tile_output_dir)
             ], check=True)
 
             # Upload tiles to Supabase
