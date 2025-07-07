@@ -217,7 +217,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
 
             # Generate tiles with gdal2tiles
             subprocess.run([
-                "gdal2tiles.py", "-z", "0-8", str(vrt_path), str(tile_output_dir)
+                "gdal2tiles.py", "-z", "0-7", str(vrt_path), str(tile_output_dir)
             ], check=True)
 
             # Upload tiles to Supabase
@@ -263,7 +263,7 @@ def main_download_nws():
     ds=skycover_ds,
     layer_name="cloud_coverage",
     supabase_prefix="data-layer-tiles/SkyCover_Tiles",
-    sleep_secs=0.04) # 30 ms
+    sleep_secs=0.045) # 45 ms
     log_memory_usage("After creating tiles for each timestep")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
