@@ -263,7 +263,7 @@ def main_download_nws():
     ds=skycover_ds,
     layer_name="cloud_coverage",
     supabase_prefix="data-layer-tiles/SkyCover_Tiles",
-    sleep_secs=0.05) # 45 ms
+    sleep_secs=0.06) # 45 ms
     log_memory_usage("After creating tiles for each timestep")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
