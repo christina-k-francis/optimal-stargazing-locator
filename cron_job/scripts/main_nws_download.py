@@ -31,7 +31,7 @@ import warnings
 import psutil
 import pathlib
 import tempfile
-from storage3 import SupabaseStorageClient, create_client
+from storage3 import create_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -159,9 +159,10 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
 
-    # Supabase client with increased timeouts (30s connect/read)
+    # Custom httpx client with extended timeouts
     http_client = httpx.Client(timeout=httpx.Timeout(30.0, read=30.0, connect=30.0))
-    storage = SupabaseStorageClient(
+
+    storage = create_client(
         "https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
         {"Authorization": f"Bearer {api_key}"},
         is_async=False,
@@ -184,7 +185,6 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     longitude=((slice_2d.longitude + 180) % 360) - 180
                 )
 
-            # Extract transform based on known grid
             dx = slice_2d.attrs["GRIB_DxInMetres"]
             dy = slice_2d.attrs["GRIB_DyInMetres"]
             minx = -2764474.3507319926
@@ -192,7 +192,6 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
 
             transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
 
-            # Define correct NDFD LCC proj string
             ndfd_proj4 = (
                 "+proj=lcc "
                 "+lat_1=25 +lat_2=25 +lat_0=25 "
@@ -202,26 +201,21 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                 "+units=m +no_defs"
             )
 
-            # Assign transform and CRS, then reproject to Web Mercator
             slice_2d.rio.write_transform(transform, inplace=True)
             slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
-            # Save GeoTIFF
             slice_2d.rio.to_raster(geo_path)
 
-            # Scale to 8-bit VRT
             subprocess.run([
                 "gdal_translate", "-of", "VRT", "-ot", "Byte",
                 "-scale", str(geo_path), str(vrt_path)
             ], check=True)
 
-            # Generate tiles
             subprocess.run([
                 "gdal2tiles.py", "-z", "0-8", str(vrt_path), str(tile_output_dir)
             ], check=True)
 
-            # Upload tiles to Supabase
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
             for root, _, files in os.walk(tile_output_dir):
@@ -231,7 +225,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     local_path = pathlib.Path(root) / file
 
                     with open(local_path, "rb") as f:
-                        storage.from_(bucket_name).upload(
+                        storage.from_("maps").upload(
                             upload_path,
                             f.read(),
                             {"content-type": "image/png", "x-upsert": "true"}
@@ -245,7 +239,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
             gc.collect()
 
     gc.collect()
-                
+                    
 def main_download_nws():
     log_memory_usage("At the Start of main_download_nws")
     
