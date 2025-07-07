@@ -177,28 +177,23 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     longitude=((slice_2d.longitude + 180) % 360) - 180
                 )
 
-            # Calculate transform from bounds
-            lon_min = np.nanmin(slice_2d.longitude.values)
-            lon_max = np.nanmax(slice_2d.longitude.values)
-            lat_min = np.nanmin(slice_2d.latitude.values)
-            lat_max = np.nanmax(slice_2d.latitude.values)
-
-            height = slice_2d.sizes['y']
-            width = slice_2d.sizes['x']
-
-            transform = affine.Affine(
-                (lon_max - lon_min) / width, 0, lon_min,
-                0, -(lat_max - lat_min) / height, lat_max
+            # Define the correct PROJ string for NDFD CONUS LCC grid
+            ndfd_proj4 = (
+                "+proj=lcc "
+                "+lat_1=25 +lat_2=25 +lat_0=25 "
+                "+lon_0=-95 "
+                "+x_0=0 +y_0=0 "
+                "+a=6371200 +b=6371200 "
+                "+units=m +no_defs"
             )
-
-            # Set spatial reference and transform
-            slice_2d.rio.write_transform(transform, inplace=True)
-            slice_2d.rio.write_crs("EPSG:4326", inplace=True) # assigning true coordinate system
-            slice_2d = slice_2d.rio.reproject("EPSG:3857") # projecting into web mercator
-
-            # Save as GeoTIFF
+            
+            # Assign true lcc coordinate system
+            slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+            # Reproject to Web Mercator (EPSG:3857)
+            slice_2d = slice_2d.rio.reproject("EPSG:3857")
+            # Export reprojected raster
             slice_2d.rio.to_raster(geo_path)
-
+            
             # Scale to 8-bit VRT
             subprocess.run([
                 "gdal_translate", "-of", "VRT", "-ot", "Byte",
@@ -253,7 +248,7 @@ def main_download_nws():
     ds=skycover_ds,
     layer_name="cloud_coverage",
     supabase_prefix="data-layer-tiles/SkyCover_Tiles",
-    sleep_secs=0.035)
+    sleep_secs=0.03) # 30 ms
     log_memory_usage("After creating tiles for each timestep")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -274,7 +269,7 @@ def main_download_nws():
     ds=precip_ds,
     layer_name="precip_probability",
     supabase_prefix="data-layer-tiles/PrecipProb_Tiles",
-    sleep_secs=0.035)
+    sleep_secs=0.03)
     log_memory_usage("After creating tiles for each timestep")
     del precip_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
