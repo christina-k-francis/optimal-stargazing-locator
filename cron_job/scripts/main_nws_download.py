@@ -24,7 +24,6 @@ import io
 import os
 import gc
 import time
-import httpx
 import subprocess
 import logging
 import warnings
@@ -90,7 +89,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
         plt.pcolormesh(lon2d, lat2d, plotting_data, cmap=cmap)
         gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False, linewidth=0.5)  
         ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5)
-        ax.add_feature(cfeature.BORDERS, linestyle=':') # type: ignore
+        ax.add_feature(cfeature.BORDERS, linestyle=':')
         ax.coastlines(resolution='110m', zorder=3) 
         gl.top_labels=False 
         plt.clim([0,100]) 
@@ -142,15 +141,15 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
     logger.info(f'GIF of Latest {data_title} forecast saved to Cloud')
     gc.collect() # cleaning up files that are no longer useful
 
+
 def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
     """
     Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
-
+    
     Parameters:
-    - ds (xarray DataArray): Dataset with dimensions [step, y, x]
+    - ds (xarray data array): xarray dataset with dimensions [step, y, x]
     - layer_name (str): Label for the tiles (e.g., "cloud_coverage")
     - supabase_prefix (str): Path prefix inside Supabase bucket
-    - sleep_secs (float): Seconds to pause between tile uploads to avoid throttling
     """
     logger.info(f"Generating tiles for {layer_name}...")
 
@@ -158,17 +157,13 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
     if not api_key:
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
-
-    # Custom httpx client with extended timeouts
-    http_client = httpx.Client(timeout=httpx.Timeout(30.0, read=30.0, connect=30.0))
-
-    storage = create_client(
-        "https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
-        {"Authorization": f"Bearer {api_key}"},
-        is_async=False,
-        client=http_client
-    )
+    
+    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
     bucket_name = "maps"
+    MAX_RETRIES = 3
+    DELAY_BETWEEN_RETRIES = 2  # seconds
 
     for i, timestep in enumerate(ds.step.values):
         logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
@@ -185,13 +180,21 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     longitude=((slice_2d.longitude + 180) % 360) - 180
                 )
 
-            dx = slice_2d.attrs["GRIB_DxInMetres"]
-            dy = slice_2d.attrs["GRIB_DyInMetres"]
+            # Extract transform based on attributes and known grid
+            dx = slice_2d.attrs["GRIB_DxInMetres"]  # Grid spacing in meters (x)
+            dy = slice_2d.attrs["GRIB_DyInMetres"]  # Grid spacing in meters (y)
+
+            # Bounds from GRIB metadata
             minx = -2764474.3507319926
             maxy = 3232111.7107923944
 
-            transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
+            # Construct affine transform: assumes grid is regularly spaced, origin at top-left
+            transform = affine.Affine(
+                dx, 0, minx, 
+                0, -dy, maxy
+            )
 
+            # Define the correct PROJ string for NDFD CONUS LCC grid
             ndfd_proj4 = (
                 "+proj=lcc "
                 "+lat_1=25 +lat_2=25 +lat_0=25 "
@@ -200,22 +203,27 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                 "+a=6371200 +b=6371200 "
                 "+units=m +no_defs"
             )
-
+            
+            # Assign transform and true lcc CRS
             slice_2d.rio.write_transform(transform, inplace=True)
             slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+            # Reproject to Web Mercator (EPSG:3857)
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
-
+            # Export reprojected raster
             slice_2d.rio.to_raster(geo_path)
-
+            
+            # Scale to 8-bit VRT
             subprocess.run([
                 "gdal_translate", "-of", "VRT", "-ot", "Byte",
                 "-scale", str(geo_path), str(vrt_path)
             ], check=True)
 
+            # Generate tiles with gdal2tiles
             subprocess.run([
                 "gdal2tiles.py", "-z", "0-8", str(vrt_path), str(tile_output_dir)
             ], check=True)
 
+            # Upload tiles to Supabase
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
             for root, _, files in os.walk(tile_output_dir):
@@ -224,22 +232,32 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
                     local_path = pathlib.Path(root) / file
 
-                    with open(local_path, "rb") as f:
-                        storage.from_("maps").upload(
-                            upload_path,
-                            f.read(),
-                            {"content-type": "image/png", "x-upsert": "true"}
-                        )
-                    gc.collect()
-                    time.sleep(sleep_secs)
+                    for attempt in range(1, MAX_RETRIES + 1):
+                        try:
+                            with open(local_path, "rb") as f:
+                                storage.from_("maps").upload(
+                                    upload_path,
+                                    f.read(),
+                                    {"content-type": "image/png", "x-upsert": "true"}
+                                )
+                            time.sleep(sleep_secs)  # 50ms = 0.05sec pause between tile uploads
+                            break  # Upload successful
+                        except Exception as e:
+                            logger.error(f"Upload failed (attempt {attempt}): {e}")
+                            if attempt < MAX_RETRIES:
+                                time.sleep(DELAY_BETWEEN_RETRIES)
+                            else:
+                                raise e
+
+                    
+                    
 
             log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
             del slice_2d
-            gc.collect()
-
-    gc.collect()
-                    
+            gc.collect() # deleting data that's no longer needed
+    gc.collect() # Garbage Collector!
+                
 def main_download_nws():
     log_memory_usage("At the Start of main_download_nws")
     
@@ -259,7 +277,7 @@ def main_download_nws():
     ds=skycover_ds,
     layer_name="cloud_coverage",
     supabase_prefix="data-layer-tiles/SkyCover_Tiles",
-    sleep_secs=0.06) # 45 ms
+    sleep_secs=0.06) # 60 ms
     log_memory_usage("After creating tiles for each timestep")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
