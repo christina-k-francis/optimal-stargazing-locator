@@ -177,6 +177,23 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     longitude=((slice_2d.longitude + 180) % 360) - 180
                 )
 
+            # Extract transform based on attributes and known grid
+            dx = slice_2d.attrs["GRIB_DxInMetres"]  # Grid spacing in meters (x)
+            dy = slice_2d.attrs["GRIB_DyInMetres"]  # Grid spacing in meters (y)
+
+            nx = slice_2d.sizes["x"]
+            ny = slice_2d.sizes["y"]
+
+            # Bounds from GRIB metadata
+            minx = -2764474.3507319926
+            maxy = 3232111.7107923944
+
+            # Construct affine transform: assumes grid is regularly spaced, origin at top-left
+            transform = affine.Affine(
+                dx, 0, minx, 
+                0, -dy, maxy
+            )
+
             # Define the correct PROJ string for NDFD CONUS LCC grid
             ndfd_proj4 = (
                 "+proj=lcc "
@@ -187,7 +204,8 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                 "+units=m +no_defs"
             )
             
-            # Assign true lcc coordinate system
+            # Assign transform and true lcc CRS
+            slice_2d.rio.write_transform(transform, inplace=True)
             slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
             # Reproject to Web Mercator (EPSG:3857)
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
