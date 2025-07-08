@@ -72,7 +72,7 @@ def load_zarr_from_supabase(bucket, path):
     return ds
 
 
-def load_tiff_from_supabase(bucket: str, path: str) -> xr.DataArray:
+def load_tiff_from_supabase(bucket: str, path: str):
     file_url = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
     with httpx.Client() as client:
         r = client.get(file_url)
@@ -85,11 +85,11 @@ def load_tiff_from_supabase(bucket: str, path: str) -> xr.DataArray:
                 tmp.flush() # ensures data is written to disk
                 
                 da = rioxarray.open_rasterio(tmp_path, masked=True)
+                os.remove(tmp.name) # ensure temp file is deleted
                 return da
         except:
             logger.exception("geoTIFF download error")
-        finally:
-            os.remove(tmp.name) # ensure temp file is deleted
+            
         
 
 def safe_upload(storage, bucket_name, supabase_path,
@@ -118,8 +118,7 @@ def safe_upload(storage, bucket_name, supabase_path,
     logger.error(f"Final failure after {max_retries} attempts for {local_file_path}")
     return False
   
-
-def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
+def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
     """
     Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
     
@@ -139,6 +138,8 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                             {"Authorization": f"Bearer {api_key}"},
                             is_async=False)
     bucket_name = "maps"
+    MAX_RETRIES = 3
+    DELAY_BETWEEN_RETRIES = 2  # seconds
 
     for i, timestep in enumerate(ds.step.values):
         logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
@@ -155,27 +156,38 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                     longitude=((slice_2d.longitude + 180) % 360) - 180
                 )
 
-            # Calculate transform from bounds
-            lon_min = np.nanmin(slice_2d.longitude.values)
-            lon_max = np.nanmax(slice_2d.longitude.values)
-            lat_min = np.nanmin(slice_2d.latitude.values)
-            lat_max = np.nanmax(slice_2d.latitude.values)
+            # Extract transform based on attributes and known grid
+            dx = slice_2d.attrs["GRIB_DxInMetres"]  # Grid spacing in meters (x)
+            dy = slice_2d.attrs["GRIB_DyInMetres"]  # Grid spacing in meters (y)
 
-            height = slice_2d.sizes['y']
-            width = slice_2d.sizes['x']
+            # Bounds from GRIB metadata
+            minx = -2764474.3507319926
+            maxy = 3232111.7107923944
 
+            # Construct affine transform: assumes grid is regularly spaced, origin at top-left
             transform = affine.Affine(
-                (lon_max - lon_min) / width, 0, lon_min,
-                0, -(lat_max - lat_min) / height, lat_max
+                dx, 0, minx, 
+                0, -dy, maxy
             )
 
-            # Set spatial reference and transform
+            # Define the correct PROJ string for NDFD CONUS LCC grid
+            ndfd_proj4 = (
+                "+proj=lcc "
+                "+lat_1=25 +lat_2=25 +lat_0=25 "
+                "+lon_0=-95 "
+                "+x_0=0 +y_0=0 "
+                "+a=6371200 +b=6371200 "
+                "+units=m +no_defs"
+            )
+            
+            # Assign transform and true lcc CRS
             slice_2d.rio.write_transform(transform, inplace=True)
-            slice_2d.rio.write_crs("EPSG:4326", inplace=True)
-
-            # Save as GeoTIFF
+            slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+            # Reproject to Web Mercator (EPSG:3857)
+            slice_2d = slice_2d.rio.reproject("EPSG:3857")
+            # Export reprojected raster
             slice_2d.rio.to_raster(geo_path)
-
+            
             # Scale to 8-bit VRT
             subprocess.run([
                 "gdal_translate", "-of", "VRT", "-ot", "Byte",
@@ -184,7 +196,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
 
             # Generate tiles with gdal2tiles
             subprocess.run([
-                "gdal2tiles.py", "-z", "0-10", str(vrt_path), str(tile_output_dir)
+                "gdal2tiles.py", "-z", "0-8", str(vrt_path), str(tile_output_dir)
             ], check=True)
 
             # Upload tiles to Supabase
@@ -196,20 +208,29 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix):
                     upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
                     local_path = pathlib.Path(root) / file
 
-                    with open(local_path, "rb") as f:
-                        storage.from_(bucket_name).upload(
-                            upload_path,
-                            f.read(),
-                            {"content-type": "image/png", "x-upsert": "true"}
-                        )
-                    gc.collect() # RAM saver - garbage collector
-                    time.sleep(0.05)  # 50ms pause between tile uploads
+                    for attempt in range(1, MAX_RETRIES + 1):
+                        try:
+                            with open(local_path, "rb") as f:
+                                storage.from_(bucket_name).upload(
+                                    upload_path,
+                                    f.read(),
+                                    {"content-type": "image/png", "x-upsert": "true"}
+                                )
+                            time.sleep(sleep_secs)  # 50ms = 0.05sec pause between tile uploads
+                            break  # Upload successful
+                        except Exception as e:
+                            logger.error(f"Upload failed (attempt {attempt}): {e}")
+                            if attempt < MAX_RETRIES:
+                                time.sleep(DELAY_BETWEEN_RETRIES)
+                            else:
+                                raise e
 
             log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
             del slice_2d
             gc.collect() # deleting data that's no longer needed
     gc.collect() # Garbage Collector!
+
 
 def main():
     log_memory_usage("At start of main script")

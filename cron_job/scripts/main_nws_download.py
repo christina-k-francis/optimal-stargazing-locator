@@ -249,9 +249,6 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                             else:
                                 raise e
 
-                    
-                    
-
             log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
             del slice_2d
