@@ -162,7 +162,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                             {"Authorization": f"Bearer {api_key}"},
                             is_async=False)
     bucket_name = "maps"
-    MAX_RETRIES = 3
+    MAX_RETRIES = 5
     DELAY_BETWEEN_RETRIES = 2  # seconds
 
     for i, timestep in enumerate(ds.step.values):
@@ -235,7 +235,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                     for attempt in range(1, MAX_RETRIES + 1):
                         try:
                             with open(local_path, "rb") as f:
-                                storage.from_("maps").upload(
+                                storage.from_(bucket_name).upload(
                                     upload_path,
                                     f.read(),
                                     {"content-type": "image/png", "x-upsert": "true"}
@@ -248,8 +248,6 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:
                                 raise e
-
-            log_memory_usage(f"After plotting timestep {timestamp_str}")
             logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
             del slice_2d
             gc.collect() # deleting data that's no longer needed
@@ -274,8 +272,8 @@ def main_download_nws():
     ds=skycover_ds,
     layer_name="cloud_coverage",
     supabase_prefix="data-layer-tiles/SkyCover_Tiles",
-    sleep_secs=0.06) # 60 ms
-    log_memory_usage("After creating tiles for each timestep")
+    sleep_secs=0.05) # 50 ms
+    log_memory_usage("After creating tiles for Sky Cover timesteps")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
     log_memory_usage("After DEL ds + Cleanup")
@@ -289,6 +287,7 @@ def main_download_nws():
     create_nws_gif(precip_ds, load_cmap("LightBluetoDarkBlue_7"),
         "Precipitation Probability (%)",
         "Precipitation Probability")
+    log_memory_usage("After creating GIF")
     gc.collect # garbage collector. deletes data no longer in use
     # Saving each timestep as a map tile
     generate_tiles_from_zarr(
@@ -296,7 +295,7 @@ def main_download_nws():
     layer_name="precip_probability",
     supabase_prefix="data-layer-tiles/PrecipProb_Tiles",
     sleep_secs=0.035)
-    log_memory_usage("After creating tiles for each timestep")
+    log_memory_usage("After creating tiles for Precip timesteps")
     del precip_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
     log_memory_usage("After DEL ds + Garbage Collector Cleanup")
@@ -317,8 +316,8 @@ def main_download_nws():
     ds=rhum_ds,
     layer_name="rel_humidity",
     supabase_prefix="data-layer-tiles/RelHumidity_Tiles",
-    sleep_secs=0.045)
-    log_memory_usage("After creating tiles for each timestep")
+    sleep_secs=0.05)
+    log_memory_usage("After creating tiles for RelHum timesteps")
     del rhum_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
     log_memory_usage("After DEL ds + Garbage Collector Cleanup")
@@ -413,7 +412,7 @@ def main_download_nws():
     layer_name="temperature",
     supabase_prefix="data-layer-tiles/Temp_Tiles",
     sleep_secs=0.06)
-    log_memory_usage("After creating tiles for each timestep")
+    log_memory_usage("After creating tiles for Temp timesteps")
     del temp_ds
     gc.collect() # Garbage Collector
     log_memory_usage("After DEL ds + GC Cleanup")
