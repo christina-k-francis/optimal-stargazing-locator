@@ -291,38 +291,11 @@ def main():
     precip_da_norm = precip_da_norm.assign_coords(
             latitude=("y", precip_da_norm.latitude[:, 0].data),
             longitude=("x", precip_da_norm.longitude[0, :].data))
-    # 3c. Expand the step dimension, so 12-hourly data -> 6-hourly
-    expanded_data = []
-    expanded_times = []
-    # create new duplicate data
-    for step in range(len(precip_da_norm["valid_time"])):
-        # current precip values
-        p_val = precip_da_norm.isel(step=step)
-        time1 = precip_da_norm['valid_time'].values[step]
-        # create 6 hour time steps
-        time2 = time1 + np.timedelta64(6, 'h')
-        expanded_times.append(time1)
-        expanded_times.append(time2)
-        # split precip evenly to assume uniform accumulation
-        expanded_data.append(p_val/2)
-        expanded_data.append(p_val/2)    
-    expanded_precip = xr.concat(expanded_data, dim='step')
-    expanded_precip['valid_time'].values = np.array(expanded_times)
-    # ensure precip has only target times (from skycover) 
-    target_times = skycover_da_norm["valid_time"].values
-    target_indx = np.isin(expanded_precip['valid_time'].values, target_times)
-    expanded_precip = expanded_precip[target_indx]
     log_memory_usage("After normalizing precip data")
     
-    # 3d. Ensuring that both datasets cover the same forecast datetimes
-    common_indx = np.isin(skycover_da_norm['valid_time'].values, expanded_precip['valid_time'].values)
-    skycover_da_norm = skycover_da_norm[common_indx]
-    # Ensuring ascending order
-    skycover_da_norm = skycover_da_norm.sortby('step')
-    expanded_precip = expanded_precip.sortby('step')
-    # avoiding duplicate step values
-    expanded_precip = expanded_precip.assign_coords(
-        step=(skycover_da_norm['step']))
+    # 3d. Ensuring that Precip dataset covers same forecast datetimes as other NWS datasets
+    common_indx = np.isin(precip_da_norm['valid_time'].values, skycover_da_norm['valid_time'].values)
+    precip_da_norm = precip_da_norm[common_indx]
 
     gc.collect # garbage collector. deletes data no longer in use
     
@@ -381,6 +354,51 @@ def main():
         method="linear"
     )
     log_memory_usage("After calculating Moon data")    
+
+    # 4b. Save Moon Illumination+Altitude data as zarr file
+    logger.info("Uploading Moon Dataset to Cloud...")
+    # Initialize SupaBase Bucket Connection
+    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
+    api_key = os.environ['SUPABASE_KEY']
+    storage_path_prefix = 'processed-data/Moon_Dataset_Latest.zarr'
+    if not api_key:
+        logger.error("Missing SUPABASE_KEY in environment variables.")
+        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    
+    storage = create_client(f"{database_url}/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"},
+                            is_async=False)
+    
+    log_memory_usage("Before recursively uploading Moon ds to Cloud")
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # save ds to temporary file
+            zarr_path = f"{tmpdir}/mydata.zarr"
+            # save as scalable chunked cloud-optimized zarr file
+            moonlight_da.to_zarr(zarr_path, mode="w", consolidated=True)
+            
+            # recursively uploading zarr data
+            for root, dirs, files in os.walk(zarr_path):
+                for file in files:
+                    local_file_path = os.path.join(root, file)
+                
+                    # Convert local path to relative path for Supabase
+                    relative_path = os.path.relpath(local_file_path, zarr_path)
+                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
+                    
+                    mime_type, _ = guess_type(file)
+                    if mime_type == None:
+                        mime_type = "application/octet-stream"
+                    
+                    uploaded = safe_upload(storage, 
+                                           "maps", 
+                                           supabase_path, 
+                                           local_file_path,
+                                           mime_type)
+                    if not uploaded:
+                        logger.error(f"Final failure for {relative_path}", exc_info=True)
+            log_memory_usage("After uploading Moon ds to cloud")
+            logger.info('Latest Moon Illumination/Altitude ds Saved to Cloud!')
 
     gc.collect # garbage collector. deletes data no longer in use
 
@@ -474,7 +492,7 @@ def main():
     }
     
     skycover_da_norm = skycover_da_norm.chunk(target_chunks)
-    expanded_precip = expanded_precip.chunk(target_chunks)
+    precip_da_norm = precip_da_norm.chunk(target_chunks)
     lightpollution_3d = lightpollution_3d.chunk(target_chunks)
     moonlight_da = moonlight_da.chunk(target_chunks)
     
@@ -488,7 +506,7 @@ def main():
     # 6a. Evaluating spatiotemporal stargazing conditions!
     stargazing_index = (
         w_cloud * skycover_da_norm +
-        w_precip * expanded_precip +
+        w_precip * precip_da_norm +
         w_LP * lightpollution_3d +
         w_moon * moonlight_da
     )

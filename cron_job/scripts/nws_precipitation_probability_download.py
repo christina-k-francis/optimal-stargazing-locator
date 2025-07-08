@@ -110,6 +110,24 @@ def get_precip_probability():
     combined_ds = xr.concat([ds_1thru3_6hr, ds_4thru7], dim="step")
     # sorting data in sequential order
     combined_ds = combined_ds.sortby("valid_time")
+
+    #Expand the step dimension, so 12-hourly data -> 6-hourly
+    expanded_data = []
+    expanded_times = []
+    # create new duplicate data
+    for step in range(len(combined_ds["valid_time"])):
+        # current precip values
+        p_val = combined_ds.isel(step=step)
+        time1 = combined_ds['valid_time'].values[step]
+        # create 6 hour time steps
+        time2 = time1 + np.timedelta64(6, 'h')
+        expanded_times.append(time1)
+        expanded_times.append(time2)
+        # 1/2 precip, assuming uniform accumulation
+        expanded_data.append(p_val/2)
+        expanded_data.append(p_val/2)    
+    expanded_precip = xr.concat(expanded_data, dim='step')
+    expanded_precip['valid_time'].values = np.array(expanded_times)
     gc.collect()
     
     # Uploading zarr file to storage bucket
@@ -133,7 +151,7 @@ def get_precip_probability():
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_path = f"{tmpdir}/mydata.zarr"
             # save as scalable chunked cloud-optimized zarr file
-            combined_ds.to_zarr(zarr_path, mode="w", consolidated=True)
+            expanded_precip.to_zarr(zarr_path, mode="w", consolidated=True)
         
             # recursively save zarr directories
             for root, dirs, files in os.walk(zarr_path):
@@ -156,7 +174,7 @@ def get_precip_probability():
                     if not uploaded:
                         logger.error(f"Final failure for {relative_path}")
             logger.info('Latest 6-hourly 7-Day Forecast Saved to Cloud!')
-            return combined_ds
+            return expanded_precip
     except:
         logger.error("Saving final dataset failed")
        
