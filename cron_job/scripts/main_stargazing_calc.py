@@ -621,7 +621,8 @@ def main():
                 generate_tiles_from_zarr(
                 ds=stargazing_ds,
                 layer_name="stargazing_grade",
-                supabase_prefix="data-layer-tiles/Stargazing_Tiles")
+                supabase_prefix="data-layer-tiles/Stargazing_Tiles",
+                sleep_secs=0.04)
             except Exception as tile_err:
                 logger.error(f"Tile generation failed: {tile_err}", exc_info=True)
                 raise # ensure main catches the error
