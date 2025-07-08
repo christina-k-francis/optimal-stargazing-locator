@@ -88,8 +88,11 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
     if local_path.exists():
         return StreamingResponse(open(local_path, "rb"), media_type="image/png")
 
-    # Attempt to download tile from supabase storage
-    supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{y}.png"
+    # Attemp downloading tile from storage path - adjusting if ds is static 
+    if layer == "LightPollution_Tiles" and timestamp == "static":
+        supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{y}.png"
+    else:
+        supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{y}.png"
     try:
         tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
         if tile_data:
@@ -117,7 +120,10 @@ async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
     
     else:
         # Attempt to check Supabase without downloading full file
-        supabase_path = f"{LAYER_PATHS[layer]}/{ts}/{z}/{x}/{y}.png"
+        if layer == "LightPollution_Tiles" and ts == "static":
+            supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{y}.png"
+        else:
+            supabase_path = f"{LAYER_PATHS[layer]}/{ts}/{z}/{x}/{y}.png"
         try:
             # Attempt to download metadata (HEAD isn't supported directly by Supabase Storage3)
             tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
