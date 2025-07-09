@@ -272,7 +272,7 @@ def main_download_nws():
     ds=skycover_ds,
     layer_name="cloud_coverage",
     supabase_prefix="data-layer-tiles/SkyCover_Tiles",
-    sleep_secs=0.03) # 30 ms
+    sleep_secs=0.025) # 25 ms
     log_memory_usage("After creating tiles for Sky Cover timesteps")
     del skycover_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -294,7 +294,7 @@ def main_download_nws():
     ds=precip_ds,
     layer_name="precip_probability",
     supabase_prefix="data-layer-tiles/PrecipProb_Tiles",
-    sleep_secs=0.035)
+    sleep_secs=0.03) # 30 ms
     log_memory_usage("After creating tiles for Precip timesteps")
     del precip_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -316,7 +316,7 @@ def main_download_nws():
     ds=rhum_ds,
     layer_name="rel_humidity",
     supabase_prefix="data-layer-tiles/RelHumidity_Tiles",
-    sleep_secs=0.035)
+    sleep_secs=0.03) # 30ms
     log_memory_usage("After creating tiles for RelHum timesteps")
     del rhum_ds
     gc.collect() # garbage collector. deletes objects that are no longer in use
@@ -411,7 +411,7 @@ def main_download_nws():
     ds=temp_ds,
     layer_name="temperature",
     supabase_prefix="data-layer-tiles/Temp_Tiles",
-    sleep_secs=0.04)
+    sleep_secs=0.035) # 35ms
     log_memory_usage("After creating tiles for Temp timesteps")
     del temp_ds
     gc.collect() # Garbage Collector
