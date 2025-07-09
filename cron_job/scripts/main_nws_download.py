@@ -243,7 +243,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                             time.sleep(sleep_secs)  # 50ms = 0.05sec pause between tile uploads
                             break  # Upload successful
                         except Exception as e:
-                            logger.error(f"Upload failed (attempt {attempt}): {e}")
+                            logger.error(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
                             if attempt < MAX_RETRIES:
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:

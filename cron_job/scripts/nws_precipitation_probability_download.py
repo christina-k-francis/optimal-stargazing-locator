@@ -24,6 +24,7 @@ import tempfile
 import time
 import logging
 import ssl
+import numpy as np
 from mimetypes import guess_type
 from storage3 import create_client
 
