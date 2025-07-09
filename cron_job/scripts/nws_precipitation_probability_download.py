@@ -129,6 +129,8 @@ def get_precip_probability():
         expanded_data.append(p_val/2)    
     expanded_precip = xr.concat(expanded_data, dim='step')
     expanded_precip['valid_time'].values = np.array(expanded_times)
+    # Passing on valuable attribute info
+    expanded_precip.attrs.update(combined_ds.attrs)
     gc.collect()
     
     # Uploading zarr file to storage bucket
