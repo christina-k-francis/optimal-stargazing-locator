@@ -26,11 +26,11 @@ def get_wind_speed_direction():
     logger.info("Downloading Latest NWS NDFD Wind Speed data...")
     speed_ds_1to3 = download_grib_with_retries(
         "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/VP.001-003/ds.wspd.bin",
-        variable_name="si10"
+        variable_key="si10"
     )
     speed_ds_4to7 = download_grib_with_retries(
         "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/VP.004-007/ds.wspd.bin",
-        variable_name="si10"
+        variable_key="si10"
     )
 
     log_memory_usage("Before preprocessing Wind Speed")
@@ -47,11 +47,11 @@ def get_wind_speed_direction():
     logger.info("Downloading Latest NWS NDFD Wind Direction data...")
     dir_ds_1to3 = download_grib_with_retries(
         "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/VP.001-003/ds.wdir.bin",
-        variable_name="wdir10"
+        variable_key="wdir10"
     )
     dir_ds_4to7 = download_grib_with_retries(
         "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/VP.004-007/ds.wdir.bin",
-        variable_name="wdir10"
+        variable_key="wdir10"
     )
 
     # 6-hourly subset for direction
