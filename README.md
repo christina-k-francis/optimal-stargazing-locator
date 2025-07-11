@@ -30,18 +30,30 @@ This project combines backend geospatial processing, automated data pipelines, a
 Optimal-Stargazing-Locator/
 ├── cron_job/
 │   ├── scripts/                 # Python backend data processing scripts
-│   │   ├── main_nws_download.py # Master script for automated NWS data download & tile generation
 │   │   ├── main_stargazing_calc.py # Master script for evaluating stagazing conditions across 7-day forecast
 │   │   ├── nws_sky_coverage_download.py
+│   │   ├── process_sky_coverage.py
 │   │   ├── nws_precipitation_probability_download.py
+│   │   ├── process_precipitation_probability.py
 │   │   ├── nws_average_temperature_download.py
+│   │   ├── process_average_temperature.py
 │   │   ├── nws_relative_humidity_download.py
 │   │   ├── nws_wind_speed_and_direction_download.py
-│   ├── render.yaml # Render.com deployment configuration for cron job
+│   │   ├── process_auxillary.py
+│   │   ├── utils/               # Collection of helper functions
+│   │   │   ├── gif_tools.py
+│   │   │   ├── memory_logger.py
+│   │   │   ├── tile_tools.py
+│   │   │   ├── upload_download_tools.py
+│   ├── render_stargazing.yaml 
+│   ├── render_skycover.yaml
+│   ├── render_precipitation.yaml 
+│   ├── render_temperature.yaml
+│   ├── render_auxillary.yaml
 │   ├── requirements.txt
 ├── tile_server/
 │   ├── tile_server.py # Backend script for serving map tiles to Mapbox Studio for visualization
-│   ├── render.yaml # Render.com deployment configuration for tile web server
+│   ├── render.yaml # Render.com deployment configuration
 │   ├── requirements.txt
 └── README.md
 ```
