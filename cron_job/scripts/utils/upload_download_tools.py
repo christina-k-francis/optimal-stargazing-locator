@@ -8,6 +8,7 @@ import time
 import tempfile
 import logging
 import mimetypes
+import requests
 from storage3 import create_client
 
 logger = logging.getLogger(__name__)
