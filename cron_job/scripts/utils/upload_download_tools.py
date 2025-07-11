@@ -3,6 +3,7 @@ Here are functions useful for uploading and downloading multidimensional
 xarray datasets/zarr files to and from supabase with fail-proof safety nets.
 """
 
+import xarray as xr
 import os
 import time
 import tempfile
