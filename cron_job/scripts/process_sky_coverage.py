@@ -4,12 +4,14 @@ Generating a GIF of the latest forecast, and a tileset.
 Both are uploaded to the cloud.
 """
 
+import xarray as xr
+from pypalettes import load_cmap
+import gc
 from nws_sky_coverage_download import get_sky_coverage
 from pypalettes import load_cmap
 from utils.gif_tools import create_nws_gif
 from utils.tile_tools import generate_tiles_from_zarr
 from utils.memory_logger import log_memory_usage
-import gc
 
 def main():
     log_memory_usage("Start of Sky Cover Processing Script")
