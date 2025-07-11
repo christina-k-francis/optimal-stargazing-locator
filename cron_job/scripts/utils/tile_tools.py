@@ -131,8 +131,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                                     f.read(),
                                     {"content-type": "image/png", "x-upsert": "true"}
                                 )
-                            log_memory_usage(f"After tile {i+1}/{len(ds.step.values)}")
-                            time.sleep(sleep_secs)  # 50ms = 0.05sec pause between tile uploads
+                            time.sleep(sleep_secs)  # 50ms = 0.05sec pause between file uploads
                             break  # Upload successful
                         except Exception as e:
                             logger.error(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
@@ -140,7 +139,8 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:
                                 raise e
-            logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
+            log_memory_usage(f"After tileset {i+1}/{len(ds.step.values)}")
+            logger.info(f"Tiles for timestep {timestamp_str} Uploaded")
             del slice_2d
             gc.collect() # deleting data that's no longer needed
     gc.collect() # Garbage Collector!
