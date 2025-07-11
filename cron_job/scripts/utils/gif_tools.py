@@ -3,6 +3,7 @@ Here are several functions that are useful for creating GIFs to display the
 latest near-term forecast of weather variables (obtained from the NWS).
 """
 
+import xarray as xr
 import io, gc
 from PIL import Image
 import numpy as np
