@@ -4,7 +4,7 @@ A web application that allows users to see a 7-day forecast of stargazing condit
 
 ---
 
-## 🌌 Overview
+## Overview 🌌
 
 The Optimal Stargazing Locator is a geospatial web tool designed to help users find the best times and places for stargazing in the U.S. (and eventually the globe). By integrating satellite-derived light pollution data, meteorological cloud cover forecasts, precipitation forecasts, moon phase, and moon altitude information, the application evaluates stargazing conditions and provides location-based quality ratings across the U.S.
 
@@ -12,7 +12,7 @@ This project combines backend geospatial processing, automated data pipelines, a
 
 ---
 
-## 📌 Features
+## Features
 
 * High-resolution **light pollution map** representing the latest version of the World Atlas of the Artificial Night Sky Brightness, developed by David J. Lorenz, based on Pierantonio Cinzano's original atlas, using more recent VIIRS satellite data from 2024
 * 7-day **cloud cover**, **precipitation**, **temperature**, and **relative humidity** forecasts from the NOAA National Weather Service, processed and tiled for efficient map rendering
@@ -24,7 +24,7 @@ This project combines backend geospatial processing, automated data pipelines, a
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Optimal-Stargazing-Locator/
@@ -46,7 +46,7 @@ Optimal-Stargazing-Locator/
 └── README.md
 ```
 
-## 📒 Usage Example
+## Usage Example
 
 1. Open the Optimal Stargazing Locator web app
 2. Enter your location or click on any location on the map
@@ -56,7 +56,7 @@ Optimal-Stargazing-Locator/
 
 ---
 
-## ⚠ Known Issues & Limitations
+## Known Issues & Limitations
 
 * Coverage limited to the continental U.S.
 * Light pollution dataset currently static using 2024 data; updates require manual processing
@@ -65,7 +65,7 @@ Optimal-Stargazing-Locator/
 
 ---
 
-## 🤝 Contributing
+## Contributions
 
 Contributions welcome! Please:
 
@@ -74,7 +74,7 @@ Contributions welcome! Please:
 
 ---
 
-## 🌟 Acknowledgments
+## Acknowledgments
 
 * NOAA/NWS for meteorological forecast data
 * David J. Lorenz for the 2024 Nighttime Radiance dataset
@@ -84,7 +84,7 @@ Contributions welcome! Please:
 
 ---
 
-## ✨ Future Plans
+## Future Plans ✨
 
 * Expand to global coverage
 * Incorporate warning for proximity to urban light dome 
