@@ -1,0 +1,11 @@
+services:
+  - type: cron
+    name: nws-download-skycover
+    env: python
+    schedule: "0 2,8,14,20 * * *"
+    runtime: python
+    buildCommand: "cd cron_job && pip install -r requirements.txt"
+    startCommand: "cd cron_job/scripts && python process_sky_coverage.py"
+    envVars:
+      - key: SUPABASE_KEY
+        sync: false
