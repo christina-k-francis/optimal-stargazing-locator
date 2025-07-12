@@ -22,5 +22,6 @@ def main():
     # Not yet using; no plots or tiles needed
     del wind_ds
     gc.collect()
+    log_memory_usage('Successful End of Aux. Dataset Processing Script!')
 
 main()

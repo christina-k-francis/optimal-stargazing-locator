@@ -19,10 +19,10 @@ def main():
     log_memory_usage("After importing sky cover dataset")
     create_nws_gif(ds, load_cmap("Bmsurface"), "Percentage of Sky Covered by Clouds", "Cloud Coverage")
     log_memory_usage("After creating sky cover gif")
-    generate_tiles_from_zarr(ds, "cloud_coverage", "data-layer-tiles/SkyCover_Tiles", 0.025)
+    generate_tiles_from_zarr(ds, "cloud_coverage", "data-layer-tiles/SkyCover_Tiles", 0.005)
     log_memory_usage("After generating sky cover tileset")
     del ds
     gc.collect()
-    log_memory_usage("End of Sky Cover Processing Script")
+    log_memory_usage("Successful End of Sky Cover Processing Script!")
 
 main()
