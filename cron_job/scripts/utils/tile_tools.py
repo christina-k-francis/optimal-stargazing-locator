@@ -14,6 +14,7 @@ import time
 import subprocess
 import logging
 import warnings
+import json
 from storage3 import create_client
 from .memory_logger import log_memory_usage
 
@@ -131,16 +132,27 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                                     f.read(),
                                     {"content-type": "image/png", "x-upsert": "true"}
                                 )
-                            time.sleep(sleep_secs)  # 50ms = 0.05sec pause between file uploads
+                            time.sleep(sleep_secs)  # Delay between tile uploads
                             break  # Upload successful
+                        except httpx.HTTPStatusError as e:
+                            try:
+                                logger.error(f"Supabase error: {e.response.json()}")
+                            except json.JSONDecodeError:
+                                logger.error(f"Supabase non-JSON response: {e.response.text}")
+                            if attempt < MAX_RETRIES:
+                                logger.warning(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
+                                time.sleep(DELAY_BETWEEN_RETRIES)
                         except Exception as e:
-                            logger.error(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
+                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}): {e}")
                             if attempt < MAX_RETRIES:
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:
-                                raise e
+                                logger.error(f"❌ Final failure uploading {upload_path}")
+
             log_memory_usage(f"After tileset {i+1}/{len(ds.step.values)}")
-            logger.info(f"Tiles for timestep {timestamp_str} Uploaded")
+            logger.info(f"✅ Tiles for timestep {timestamp_str} uploaded.")
             del slice_2d
-            gc.collect() # deleting data that's no longer needed
-    gc.collect() # Garbage Collector!
+            gc.collect()
+
+    gc.collect() # garbage collector
+ 

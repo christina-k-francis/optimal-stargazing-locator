@@ -16,7 +16,7 @@ def main():
     ds = get_precip_probability()
     create_nws_gif(ds, load_cmap("LightBluetoDarkBlue_7"), "Precipitation Probability (%)",
                     "Precipitation Probability")
-    generate_tiles_from_zarr(ds, "precip_probability", "data-layer-tiles/PrecipProb_Tiles", 0.005)
+    generate_tiles_from_zarr(ds, "precip_probability", "data-layer-tiles/PrecipProb_Tiles", 0.01)
     del ds
     gc.collect()
     log_memory_usage('Successful End of Precipitation Processing Script!')
