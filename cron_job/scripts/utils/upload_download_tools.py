@@ -4,10 +4,14 @@ xarray datasets/zarr files to and from supabase with fail-proof safety nets.
 """
 
 import xarray as xr
+import rioxarray
 import os
 import time
+import httpx
+import fsspec
 import tempfile
 import logging
+import warnings
 import mimetypes
 import requests
 from storage3 import create_client
@@ -15,6 +19,16 @@ from storage3 import create_client
 logger = logging.getLogger(__name__)
 MAX_RETRIES = 5
 DELAY_BETWEEN_RETRIES = 2  # seconds
+
+# Redirect all warnings to the logger
+logging.captureWarnings(True)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# silence packages with noisy logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("fsspec").setLevel(logging.WARNING)
+logging.getLogger("supabase").setLevel(logging.WARNING)
 
 def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
     """
@@ -115,3 +129,47 @@ def download_grib_with_retries(url, variable_key, max_retries=5, timeout=90):
             logger.info(f"Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
 
+def load_zarr_from_supabase(bucket, path):
+    """
+    Downloads the specified zarr file from the provided supabase storage path.
+
+    Parameters:
+    - bucket: supabase storage bucket name in string format
+    - path: path within supabase storage bucket to the desired GeoTIFF in str format
+
+    Returns:
+    - xarray.DataArray 
+    """
+    url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}/"
+    fs = fsspec.filesystem("http")
+    ds = xr.open_zarr(fs.get_mapper(url_base), consolidated=True,
+                      decode_timedelta='CFTimedeltaCoder')
+    return ds
+
+def load_tiff_from_supabase(bucket: str, path: str):
+    """
+    Downloads the specified GeoTIFF from the provided supabase storage path.
+
+    Parameters:
+    - bucket: supabase storage bucket name in string format
+    - path: path within supabase storage bucket to the desired GeoTIFF
+
+    Returns:
+    - xarray.DataArray or None
+    """
+    file_url = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
+    with httpx.Client() as client:
+        r = client.get(file_url)
+        r.raise_for_status()
+    
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
+                tmp.write(r.content)
+                tmp_path = tmp.name  
+                tmp.flush() # ensures data is written to disk
+                
+                da = rioxarray.open_rasterio(tmp_path, masked=True)
+                os.remove(tmp.name) # ensure temp file is deleted
+                return da
+        except:
+            logger.exception("geoTIFF download error")

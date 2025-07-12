@@ -17,8 +17,8 @@ Created on Wed May 21 19:57:18 2025
 import gc
 import xarray as xr
 import pandas as pd
-import numpy as np
 import logging
+import warnings
 from utils.upload_download_tools import download_grib_with_retries, upload_zarr_dataset
 
 logging.basicConfig(
@@ -26,6 +26,16 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+# Redirect all warnings to the logger
+logging.captureWarnings(True)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# silence packages with noisy logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("fsspec").setLevel(logging.WARNING)
+logging.getLogger("supabase").setLevel(logging.WARNING)
 
 def get_relhum_percent():
     # URLs from NOAA NWS NDFD and grib cloud paths
