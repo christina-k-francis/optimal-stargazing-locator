@@ -16,24 +16,18 @@ Created on Sun May 18 16:20:39 2025
 import xarray as xr
 import numpy as np
 import os
-import psutil
 import gc
-import rioxarray
+import rasterio
 import pandas as pd
 from skyfield.api import load, wgs84
 import pytz
 import tempfile
-import httpx
-import time
-import ssl
-import fsspec
 import logging
 import warnings
-import affine
-import pathlib
-import subprocess
 from mimetypes import guess_type
 from storage3 import create_client
+from utils.memory_logger import log_memory_usage
+from utils.upload_download_tools import load_zarr_from_supabase,load_tiff_from_supabase,upload_zarr_dataset 
 
 
 # Set up logging
@@ -56,181 +50,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
 logging.getLogger("supabase").setLevel(logging.WARNING)  
-
-# Helpful functions
-def log_memory_usage(stage: str):
-    """Logs the RAM usage (RSS Memory) at it's position in the script"""
-    process = psutil.Process(os.getpid())
-    mem = process.memory_info().rss / (1024 ** 2)  # Convert bytes to MB
-    logger.info(f"[MEMORY] RSS memory usage {stage}: {mem:.2f} MB ")
-
-def load_zarr_from_supabase(bucket, path):
-    url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}/"
-    fs = fsspec.filesystem("http")
-    ds = xr.open_zarr(fs.get_mapper(url_base), consolidated=True,
-                      decode_timedelta='CFTimedeltaCoder')
-    return ds
-
-
-def load_tiff_from_supabase(bucket: str, path: str):
-    file_url = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
-    with httpx.Client() as client:
-        r = client.get(file_url)
-        r.raise_for_status()
-    
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
-                tmp.write(r.content)
-                tmp_path = tmp.name  
-                tmp.flush() # ensures data is written to disk
-                
-                da = rioxarray.open_rasterio(tmp_path, masked=True)
-                os.remove(tmp.name) # ensure temp file is deleted
-                return da
-        except:
-            logger.exception("geoTIFF download error")
-            
-        
-
-def safe_upload(storage, bucket_name, supabase_path,
-                local_file_path, file_type, max_retries=3):
-    for attempt in range(1, max_retries + 1):
-        try:
-            with open(local_file_path, 'rb') as f:
-                storage.from_(bucket_name).upload( 
-                    supabase_path,
-                    f.read(),
-                    file_options={"content-type": file_type,
-                                  "upsert": "true"})
-            return True  # Success!
-
-        except ssl.SSLError as ssl_err:
-            logger.error(f"SSL error on attempt {attempt}: {ssl_err}", exc_info=True)
-        
-        except Exception as e:
-            logger.error(f"Upload attempt {attempt} failed for {local_file_path}: {e}", exc_info=True)
-        
-        # Wait before retrying (exponential backoff)
-        sleep_time = 2 * attempt
-        logger.info(f"Retrying upload in {sleep_time} seconds...")
-        time.sleep(sleep_time)
-
-    logger.error(f"Final failure after {max_retries} attempts for {local_file_path}")
-    return False
-  
-def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
-    """
-    Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
-    
-    Parameters:
-    - ds (xarray data array): xarray dataset with dimensions [step, y, x]
-    - layer_name (str): Label for the tiles (e.g., "stargazing_grade")
-    - supabase_prefix (str): Path prefix inside Supabase bucket
-    """
-    logger.info(f"Generating tiles for {layer_name}...")
-
-    api_key = os.environ['SUPABASE_KEY']
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
-    
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
-    bucket_name = "maps"
-    MAX_RETRIES = 3
-    DELAY_BETWEEN_RETRIES = 2  # seconds
-
-    for i, timestep in enumerate(ds.step.values):
-        logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
-        slice_2d = ds.isel(step=i)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
-            vrt_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.vrt"
-            tile_output_dir = pathlib.Path(tmpdir) / "tiles"
-
-            # Ensure longitude values are in -180 to 180 if necessary
-            if np.nanmax(slice_2d.longitude.values) > 180:
-                slice_2d = slice_2d.assign_coords(
-                    longitude=((slice_2d.longitude + 180) % 360) - 180
-                )
-
-            # Extract transform based on attributes and known grid
-            dx = slice_2d.attrs["GRIB_DxInMetres"]  # Grid spacing in meters (x)
-            dy = slice_2d.attrs["GRIB_DyInMetres"]  # Grid spacing in meters (y)
-
-            # Bounds from GRIB metadata
-            minx = -2764474.3507319926
-            maxy = 3232111.7107923944
-
-            # Construct affine transform: assumes grid is regularly spaced, origin at top-left
-            transform = affine.Affine(
-                dx, 0, minx, 
-                0, -dy, maxy
-            )
-
-            # Define the correct PROJ string for NDFD CONUS LCC grid
-            ndfd_proj4 = (
-                "+proj=lcc "
-                "+lat_1=25 +lat_2=25 +lat_0=25 "
-                "+lon_0=-95 "
-                "+x_0=0 +y_0=0 "
-                "+a=6371200 +b=6371200 "
-                "+units=m +no_defs"
-            )
-            
-            # Assign transform and true lcc CRS
-            slice_2d.rio.write_transform(transform, inplace=True)
-            slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
-            # Reproject to Web Mercator (EPSG:3857)
-            slice_2d = slice_2d.rio.reproject("EPSG:3857")
-            # Export reprojected raster
-            slice_2d.rio.to_raster(geo_path)
-            
-            # Scale to 8-bit VRT
-            subprocess.run([
-                "gdal_translate", "-of", "VRT", "-ot", "Byte",
-                "-scale", str(geo_path), str(vrt_path)
-            ], check=True)
-
-            # Generate tiles with gdal2tiles
-            subprocess.run([
-                "gdal2tiles.py", "-z", "0-8", str(vrt_path), str(tile_output_dir)
-            ], check=True)
-
-            # Upload tiles to Supabase
-            timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
-
-            for root, _, files in os.walk(tile_output_dir):
-                for file in files:
-                    rel_path = pathlib.Path(root).relative_to(tile_output_dir)
-                    upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
-                    local_path = pathlib.Path(root) / file
-
-                    for attempt in range(1, MAX_RETRIES + 1):
-                        try:
-                            with open(local_path, "rb") as f:
-                                storage.from_(bucket_name).upload(
-                                    upload_path,
-                                    f.read(),
-                                    {"content-type": "image/png", "x-upsert": "true"}
-                                )
-                            time.sleep(sleep_secs)  # 50ms = 0.05sec pause between tile uploads
-                            break  # Upload successful
-                        except Exception as e:
-                            logger.error(f"Upload failed (attempt {attempt}): {e}")
-                            if attempt < MAX_RETRIES:
-                                time.sleep(DELAY_BETWEEN_RETRIES)
-                            else:
-                                raise e
-
-            log_memory_usage(f"After plotting timestep {timestamp_str}")
-            logger.info(f"Tiles for timestep {timestamp_str} uploaded to Supabase")
-            del slice_2d
-            gc.collect() # deleting data that's no longer needed
-    gc.collect() # Garbage Collector!
-
 
 def main():
     log_memory_usage("At start of main script")
@@ -357,49 +176,8 @@ def main():
 
     # 4b. Save Moon Illumination+Altitude data as zarr file
     logger.info("Uploading Moon Dataset to Cloud...")
-    # Initialize SupaBase Bucket Connection
-    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
-    api_key = os.environ['SUPABASE_KEY']
-    storage_path_prefix = 'processed-data/Moon_Dataset_Latest.zarr'
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
     
-    storage = create_client(f"{database_url}/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
-    
-    log_memory_usage("Before recursively uploading Moon ds to Cloud")
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # save ds to temporary file
-            zarr_path = f"{tmpdir}/mydata.zarr"
-            # save as scalable chunked cloud-optimized zarr file
-            moonlight_da.to_zarr(zarr_path, mode="w", consolidated=True)
-            
-            # recursively uploading zarr data
-            for root, dirs, files in os.walk(zarr_path):
-                for file in files:
-                    local_file_path = os.path.join(root, file)
-                
-                    # Convert local path to relative path for Supabase
-                    relative_path = os.path.relpath(local_file_path, zarr_path)
-                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
-                    
-                    mime_type, _ = guess_type(file)
-                    if mime_type == None:
-                        mime_type = "application/octet-stream"
-                    
-                    uploaded = safe_upload(storage, 
-                                           "maps", 
-                                           supabase_path, 
-                                           local_file_path,
-                                           mime_type)
-                    if not uploaded:
-                        logger.error(f"Final failure for {relative_path}", exc_info=True)
-            log_memory_usage("After uploading Moon ds to cloud")
-            logger.info('Latest Moon Illumination/Altitude ds Saved to Cloud!')
-
     gc.collect # garbage collector. deletes data no longer in use
 
     logger.info('Preprocessing high-res light pollution data...')
@@ -591,66 +369,7 @@ def main():
     
     # 6d. Save Stargazing_Index as zarr file
     logger.info("Uploading Stargazing Evaluation Dataset to Cloud...")
-    # Initialize SupaBase Bucket Connection
-    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
-    api_key = os.environ['SUPABASE_KEY']
-    storage_path_prefix = 'processed-data/Stargazing_Dataset_Latest.zarr'
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
-    
-    storage = create_client(f"{database_url}/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
-    
-    log_memory_usage("Before recursively uploading Stargazing ds to Cloud")
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # save ds to temporary file
-            zarr_path = f"{tmpdir}/mydata.zarr"
-            # save as scalable chunked cloud-optimized zarr file
-            stargazing_ds.to_zarr(zarr_path, mode="w", consolidated=True)
-            
-            # recursively uploading zarr data
-            for root, dirs, files in os.walk(zarr_path):
-                for file in files:
-                    local_file_path = os.path.join(root, file)
-                
-                    # Convert local path to relative path for Supabase
-                    relative_path = os.path.relpath(local_file_path, zarr_path)
-                    supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
-                    
-                    mime_type, _ = guess_type(file)
-                    if mime_type == None:
-                        mime_type = "application/octet-stream"
-                    
-                    uploaded = safe_upload(storage, 
-                                           "maps", 
-                                           supabase_path, 
-                                           local_file_path,
-                                           mime_type)
-                    if not uploaded:
-                        logger.error(f"Final failure for {relative_path}", exc_info=True)
-            log_memory_usage("After uploading stargazing ds to cloud")
-            logger.info('Latest Stargazing Letter Grades Saved to Cloud!')
-
-            try:
-                # Saving each timestep as a map tile
-                generate_tiles_from_zarr(
-                ds=stargazing_ds,
-                layer_name="stargazing_grade",
-                supabase_prefix="data-layer-tiles/Stargazing_Tiles",
-                sleep_secs=0.04)
-            except Exception as tile_err:
-                logger.error(f"Tile generation failed: {tile_err}", exc_info=True)
-                raise # ensure main catches the error
-
-            log_memory_usage("After creating tiles for each timestep")
-            logger.info("Stargazing DS tiles uploaded successfully!")
-            return stargazing_ds
-
-    except:
-        logger.error("Saving final dataset failed", exc_info=True)
+    upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
     
 # Let's execute this main function!
