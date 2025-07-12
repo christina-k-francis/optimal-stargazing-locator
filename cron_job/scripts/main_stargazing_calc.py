@@ -15,17 +15,13 @@ Created on Sun May 18 16:20:39 2025
 ###
 import xarray as xr
 import numpy as np
-import os
 import gc
-import rasterio
+import rioxarray
 import pandas as pd
 from skyfield.api import load, wgs84
 import pytz
-import tempfile
 import logging
 import warnings
-from mimetypes import guess_type
-from storage3 import create_client
 from utils.memory_logger import log_memory_usage
 from utils.upload_download_tools import load_zarr_from_supabase,load_tiff_from_supabase,upload_zarr_dataset 
 
