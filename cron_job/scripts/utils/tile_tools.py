@@ -15,6 +15,7 @@ import subprocess
 import logging
 import warnings
 import json
+import httpx
 from storage3 import create_client
 from .memory_logger import log_memory_usage
 
