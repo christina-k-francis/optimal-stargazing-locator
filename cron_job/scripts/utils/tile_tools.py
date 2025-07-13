@@ -100,6 +100,11 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
             # Assign transform and true lcc CRS
             slice_2d.rio.write_transform(transform, inplace=True)
             slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+
+            # Ensure the y-axis goes North to South
+            if "y" in slice_2d.dims:
+                slice_2d = slice_2d.sortby("y", ascending=False)
+
             # Reproject to Web Mercator (EPSG:3857)
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
             # Export reprojected raster
@@ -113,7 +118,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
 
             # Generate tiles with gdal2tiles
             subprocess.run([
-                "gdal2tiles.py", "-z", "0-8", str(vrt_path), str(tile_output_dir)
+                "gdal2tiles.py", "-z", "2-8", str(vrt_path), str(tile_output_dir)
             ], check=True)
 
             # Upload tiles to Supabase
