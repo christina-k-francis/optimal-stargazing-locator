@@ -108,9 +108,11 @@ def main():
             longitude=("x", precip_da_norm.longitude[0, :].data))
     log_memory_usage("After normalizing precip data")
     
-    # 3d. Ensuring that Precip dataset covers same forecast datetimes as other NWS datasets
-    common_indx = np.isin(precip_da_norm['valid_time'].values, skycover_da_norm['valid_time'].values)
-    precip_da_norm = precip_da_norm[common_indx]
+    # 3d. Ensuring that NWS datasets cover same forecast datetimes
+    precip_da_norm = precip_da_norm[np.isin(precip_da_norm['valid_time'].values,
+                                             skycover_da_norm['valid_time'].values)]
+    skycover_da_norm = skycover_da_norm[np.isin(skycover_da_norm['valid_time'].values,
+                                                 precip_da_norm['valid_time'].values)]
 
     gc.collect # garbage collector. deletes data no longer in use
     
