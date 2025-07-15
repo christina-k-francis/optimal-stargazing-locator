@@ -14,7 +14,7 @@ def main():
     log_memory_usage("Start of Temperature Processing Script")
     ds = get_temperature()
     create_nws_temp_gif(ds, "RdYlBu_r", "Temperature in Fahrenheit and Celsius")
-    generate_tiles_from_zarr(ds, "temperature", "data-layer-tiles/Temp_Tiles", 0.005)
+    generate_tiles_from_zarr(ds, "temperature", "data-layer-tiles/Temp_Tiles", 0.005, "RdYlBu_r")
     del ds
     gc.collect()
     log_memory_usage("Successful End of Temperature Processing Script!")
