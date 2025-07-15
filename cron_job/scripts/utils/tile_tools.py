@@ -17,6 +17,10 @@ import warnings
 import json
 import httpx
 from storage3 import create_client
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
+import rasterio
 from .memory_logger import log_memory_usage
 
 logging.basicConfig(
@@ -35,28 +39,32 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
 logging.getLogger("supabase").setLevel(logging.WARNING)  
 
-def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
+def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="viridis"):
     """
-    Converts a Zarr dataset to raster tiles per time step and uploads to Supabase.
-    
+    Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
+
     Parameters:
     - ds (xarray data array): xarray dataset with dimensions [step, y, x]
     - layer_name (str): Label for the tiles (e.g., "cloud_coverage")
     - supabase_prefix (str): Path prefix inside Supabase bucket
+    - sleep_secs (int): Delay between tile uploads
+    - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
     """
-    logger.info(f"Generating tiles for {layer_name}...")
+
+    logger.info(f"Generating tiles for {layer_name} with colormap: {colormap_name}")
 
     api_key = os.environ['SUPABASE_KEY']
     if not api_key:
         logger.error("Missing SUPABASE_KEY in environment variables.")
         raise EnvironmentError("SUPABASE_KEY is required but not set.")
-    
+
     storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
                             {"Authorization": f"Bearer {api_key}"},
                             is_async=False)
+
     bucket_name = "maps"
     MAX_RETRIES = 5
-    DELAY_BETWEEN_RETRIES = 2  # seconds
+    DELAY_BETWEEN_RETRIES = 2
 
     for i, timestep in enumerate(ds.step.values):
         logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
@@ -64,64 +72,57 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
-            vrt_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.vrt"
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
-            # Ensure longitude values are in -180 to 180 if necessary
-            if np.nanmax(slice_2d.longitude.values) > 180:
-                slice_2d = slice_2d.assign_coords(
-                    longitude=((slice_2d.longitude + 180) % 360) - 180
-                )
-
-            # Extract transform based on attributes and known grid
-            dx = slice_2d.attrs["GRIB_DxInMetres"]  # Grid spacing in meters (x)
-            dy = slice_2d.attrs["GRIB_DyInMetres"]  # Grid spacing in meters (y)
-
-            # Bounds from GRIB metadata
+            # Extract transform based on attributes and GRIB metadata
+            dx = slice_2d.attrs["GRIB_DxInMetres"]
+            dy = slice_2d.attrs["GRIB_DyInMetres"]
             minx = -2764474.3507319926
             maxy = 3232111.7107923944
 
-            # Construct affine transform: assumes grid is regularly spaced, origin at top-left
-            transform = affine.Affine(
-                dx, 0, minx, 
-                0, -dy, maxy
+            transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
+
+            # Define the correct PROJ string for NDFD using CONUS LCC grid
+            ndfd_proj4 = (
+                "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
+                "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
             )
 
-            # Define the correct PROJ string for NDFD CONUS LCC grid
-            ndfd_proj4 = (
-                "+proj=lcc "
-                "+lat_1=25 +lat_2=25 +lat_0=25 "
-                "+lon_0=-95 "
-                "+x_0=0 +y_0=0 "
-                "+a=6371200 +b=6371200 "
-                "+units=m +no_defs"
-            )
-            
-            # Assign transform and true lcc CRS
+            # Assign transform and appropriate CRS
             slice_2d.rio.write_transform(transform, inplace=True)
             slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
 
-            # Ensure the y-axis goes North to South
             if "y" in slice_2d.dims:
                 slice_2d = slice_2d.sortby("y", ascending=False)
 
-            # Reproject to Web Mercator (EPSG:3857)
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
-            # Export reprojected raster
-            slice_2d.rio.to_raster(geo_path)
-            
-            # Scale to 8-bit VRT
+
+            # Apply colormap and save as RGB GeoTIFF
+            data = slice_2d.values
+            norm = Normalize(vmin=float(np.nanmin(data)), vmax=float(np.nanmax(data)))
+            cmap = cm.get_cmap(colormap_name)
+            rgba_img = (cmap(norm(data)) * 255).astype("uint8")
+            rgb_img = rgba_img[:, :, :3]  # Drop alpha
+
+            with rasterio.open(
+                geo_path,
+                "w",
+                driver="GTiff",
+                height=rgb_img.shape[0],
+                width=rgb_img.shape[1],
+                count=3,
+                dtype=rgb_img.dtype,
+                crs="EPSG:3857",
+                transform=slice_2d.rio.transform()
+            ) as dst:
+                for band in range(3):
+                    dst.write(rgb_img[:, :, band], band + 1)
+
+            # Generate tiles from RGB GeoTIFF
             subprocess.run([
-                "gdal_translate", "-of", "VRT", "-ot", "Byte",
-                "-scale", str(geo_path), str(vrt_path)
+                "gdal2tiles.py", "-z", "2-8", str(geo_path), str(tile_output_dir)
             ], check=True)
 
-            # Generate tiles with gdal2tiles
-            subprocess.run([
-                "gdal2tiles.py", "-z", "2-8", str(vrt_path), str(tile_output_dir)
-            ], check=True)
-
-            # Upload tiles to Supabase
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
             for root, _, files in os.walk(tile_output_dir):
@@ -138,8 +139,8 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs):
                                     f.read(),
                                     {"content-type": "image/png", "x-upsert": "true"}
                                 )
-                            time.sleep(sleep_secs)  # Delay between tile uploads
-                            break  # Upload successful
+                            time.sleep(sleep_secs) # delay btw tile uploads to avoid cloud overload
+                            break # upload successful
                         except httpx.HTTPStatusError as e:
                             try:
                                 logger.error(f"Supabase error: {e.response.json()}")
