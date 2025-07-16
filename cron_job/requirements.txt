@@ -2,6 +2,7 @@ affine>=2.4.0
 Cartopy==0.24.1
 certifi
 cfgrib==0.9.15.0
+cftime
 charset_normalizer
 contourpy
 cycler
