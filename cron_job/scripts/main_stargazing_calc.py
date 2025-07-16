@@ -360,6 +360,8 @@ def main():
     stargazing_ds = xr.merge([stargazing_index.rename("index"),
                               stargazing_grades.rename("grade_num")],
                              combine_attrs='no_conflicts')
+    # Passing on attribute data
+    stargazing_ds.attrs.update(skycover_da_norm.attrs)
 
     gc.collect # garbage collector. deletes data no longer in use
     
