@@ -23,6 +23,7 @@ import pytz
 import logging
 import warnings
 from utils.memory_logger import log_memory_usage
+from utils.tile_tools import generate_tiles_from_zarr 
 from utils.upload_download_tools import load_zarr_from_supabase,load_tiff_from_supabase,upload_zarr_dataset 
 
 
@@ -113,6 +114,9 @@ def main():
                                              skycover_da_norm['valid_time'].values)]
     skycover_da_norm = skycover_da_norm[np.isin(skycover_da_norm['valid_time'].values,
                                                  precip_da_norm['valid_time'].values)]
+    
+    # 3e. Ensuring step coordinate values are also shared
+    precip_da_norm = precip_da_norm.assign_coords(step=skycover_da_norm['step'])
 
     gc.collect # garbage collector. deletes data no longer in use
     
@@ -262,9 +266,9 @@ def main():
     logger.info("Evaluating Stargazing Conditions...")
     # Ensuring that datasets are aligned chunk-wise
     target_chunks = {
-        'step': 4,
-        'y': 345,    # 1377 ≈ 345 * 4
-        'x': 537     # same as current x chunks
+        'step': 3,
+        'y': 459,  # 1377 ≈ 459 * 3
+        'x': 715   # 2145 ≈ 715 * 3
     }
     
     skycover_da_norm = skycover_da_norm.chunk(target_chunks)
@@ -287,12 +291,6 @@ def main():
         w_moon * moonlight_da
     )
     
-    # Ensure dataset chunks are uniform
-    stargazing_index = stargazing_index.chunk({
-        'step': 2,
-        'y': 173,
-        'x': 537
-    })
     # let's make valid_time a single chunk of its own
     stargazing_index['valid_time'] = stargazing_index['valid_time'].chunk({})
     if 'chunks' in stargazing_index['valid_time'].encoding:
@@ -365,9 +363,12 @@ def main():
 
     gc.collect # garbage collector. deletes data no longer in use
     
-    # 6d. Save Stargazing_Index as zarr file
+    # 6d. Save Stargazing DS as zarr file
     logger.info("Uploading Stargazing Evaluation Dataset to Cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
+
+    # 6e. Save Staragazing DS as a tileset
+    generate_tiles_from_zarr(stargazing_ds, "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
 
     
 # Let's execute this main function!
