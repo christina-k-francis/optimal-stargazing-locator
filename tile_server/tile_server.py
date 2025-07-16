@@ -85,8 +85,13 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
     local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
+    headers = {
+        "Cache-Control": "public, max-age=604800",  # Cache for 7 days
+        "Content-Type": "image/png"
+    }
+    
     if local_path.exists():
-        return StreamingResponse(open(local_path, "rb"), media_type="image/png")
+        return StreamingResponse(open(local_path, "rb"), headers=headers)
 
     if layer == "LightPollution_Tiles" and timestamp == "static":
         supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
@@ -98,12 +103,18 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
         if tile_data:
             with open(local_path, "wb") as f:
                 f.write(tile_data)
-            return StreamingResponse(open(local_path, "rb"), media_type="image/png")
+            return StreamingResponse(open(local_path, "rb"), headers=headers)
     except Exception as e:
         logger.warning(f"Tile missing/error ({supabase_path}): {e}")
 
     # Serve blank tile in place of missing data (also cache it locally)
-    return serve_blank_tile(local_path)
+    return StreamingResponse(
+    open(blank_tile_path, "rb"),
+    headers={
+        "Cache-Control": "public, max-age=604800",
+        "Content-Type": "image/png"
+    }
+)
 
 @app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
 async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
