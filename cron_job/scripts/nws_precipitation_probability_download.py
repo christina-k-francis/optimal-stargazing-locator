@@ -69,24 +69,28 @@ def get_precip_probability():
     #Expand the step dimension, so 12-hourly data -> 6-hourly
     expanded_data = []
     expanded_times = []
-    # create new duplicate data
+    
     for step in range(len(combined_ds["valid_time"])):
-        # current precip values
-        p_val = combined_ds.isel(step=step)
+        # current precip + time values
+        p_val = combined_ds.isel(step=step).drop_vars("step") # remove inherited step
         time1 = combined_ds['valid_time'].values[step]
         # create 6 hour time steps
         time2 = time1 + np.timedelta64(6, 'h')
-        expanded_times.append(time1)
-        expanded_times.append(time2)
-        # 1/2 precip, assuming uniform accumulation
-        expanded_data.append(p_val/2)
-        expanded_data.append(p_val/2)    
+        
+        # Split into two 6-hour values (uniform assumption)
+        expanded_data.extend([p_val/2,p_val/2])
+        expanded_times.extend([time1, time2])
+    # concat into a single dataset
     expanded_precip = xr.concat(expanded_data, dim='step')
-    expanded_precip['valid_time'].values = np.array(expanded_times)
-    # Passing on valuable attribute info
+    # assign new step and valid_time coordinates to ensure no duplicates
+    expanded_precip = expanded_precip.assign_coords({
+        "valid_time": ("step", expanded_times),
+        "step": np.arange(len(expanded_times))  # clean numeric step index
+        })
+    # Preserving valuable attribute info
     expanded_precip.attrs.update(combined_ds.attrs)
     
-    logger.info(f"Dataset shape: {expanded_precip.shape}, steps: {len(expanded_precip.step)}")
+    logger.info(f"steps: {len(expanded_precip.step)}, y: {len(expanded_precip.y)}, x: {len(expanded_precip.x)}")
     
     gc.collect()
     

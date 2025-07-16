@@ -65,7 +65,7 @@ def get_relhum_percent():
     # sorting data in sequential order
     combined_ds = combined_ds.sortby("step")
     
-    logger.info(f"Dataset shape: {combined_ds.shape}, steps: {len(combined_ds.step)}")
+    logger.info(f"steps: {len(combined_ds.step)}, y: {len(combined_ds.y)}, x: {len(combined_ds.x)}")
     
     gc.collect()
     

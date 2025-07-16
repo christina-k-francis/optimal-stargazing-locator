@@ -71,7 +71,7 @@ def get_temperature():
     combined_ds = combined_ds.assign_coords({"celsius":(["step", "y","x"],
                                                         (combined_ds.values-273.15))})
     
-    logger.info(f"Dataset shape: {combined_ds.shape}, steps: {len(combined_ds.step)}")
+    logger.info(f"steps: {len(combined_ds.step)}, y: {len(combined_ds.y)}, x: {len(combined_ds.x)}")
     
     gc.collect()
 
