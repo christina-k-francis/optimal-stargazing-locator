@@ -58,7 +58,7 @@ LAYER_PATHS = {
     "PrecipProb_Tiles": "data-layer-tiles/PrecipProb_Tiles",
     "Temp_Tiles": "data-layer-tiles/Temp_Tiles",
     "Stargazing_Tiles": "data-layer-tiles/Stargazing_Tiles",
-    "LightPollution_Tiles": "light-pollution-data/zenith_ConUSA_250m_tiles",
+    "LightPollution_Tiles": "light-pollution-data/zenith_ConUSA_colored_tiles",
 }
 
 # blank tile configuration
