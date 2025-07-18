@@ -61,7 +61,7 @@ def main():
     log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
     lightpollution_da = load_tiff_from_supabase("maps",
-                        "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
+                        "light-pollution-data/zenith_brightness_2024_ConUSA_WebMerc.tif")
     # define coordinate system, clip to United States, assign lat and lon xr coords
     lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
     lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
@@ -360,8 +360,8 @@ def main():
     stargazing_ds = xr.merge([stargazing_index.rename("index"),
                               stargazing_grades.rename("grade_num")],
                              combine_attrs='no_conflicts')
-    # Passing on attribute data
-    stargazing_ds.attrs.update(skycover_da_norm.attrs)
+    # Passing on GRIB attribute data as well
+    stargazing_ds.attrs.update((stargazing_ds.attrs | skycover_da.attrs))
 
     gc.collect # garbage collector. deletes data no longer in use
     
