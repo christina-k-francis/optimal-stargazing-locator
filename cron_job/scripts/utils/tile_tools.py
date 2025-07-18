@@ -95,6 +95,9 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colorm
             if "y" in slice_2d.dims:
                 slice_2d = slice_2d.sortby("y", ascending=False)
 
+            # Drop 2D geographic coordinates to prevent reproject conflict
+            slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
+            # Reproject into Web Mercator
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
             # Apply colormap and save as RGB GeoTIFF
