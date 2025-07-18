@@ -61,7 +61,7 @@ def main():
     log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
     lightpollution_da = load_tiff_from_supabase("maps",
-                        "light-pollution-data/zenith_brightness_2024_ConUSA_WebMerc.tif")
+                        "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
     # define coordinate system, clip to United States, assign lat and lon xr coords
     lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
     lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
