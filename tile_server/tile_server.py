@@ -116,31 +116,29 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
     }
 )
 
-@app.head("/tiles/{layer}/{ts}/{z}/{x}/{y}.png")
-async def head_tile(layer: str, ts: str, z: int, x: int, y: int):
-    """Check tile existence in cache or cloud, with y-flip for Slippy Map."""
+@app.head("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
+async def head_tile(layer: str, timestamp: str, z: int, x: int, y: int):
+    """HEAD request: check tile existence in cache and/or cloud, with y-flip for Slippy Map."""
     if layer not in LAYER_PATHS:
         return Response(status_code=404)
 
     slippy_y = (2 ** z) - 1 - y
-    # local cache path
-    local_path = CACHE_DIR / layer / ts / str(z) / str(x) / f"{slippy_y}.png"
+    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
 
     if local_path.exists():
         return Response(status_code=200)
-    # Attempt to check Supabase without downloading full file
-    if layer == "LightPollution_Tiles" and ts == "static":
+
+    if layer == "LightPollution_Tiles" and timestamp == "static":
         supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
     else:
-        supabase_path = f"{LAYER_PATHS[layer]}/{ts}/{z}/{x}/{slippy_y}.png"
+        supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
 
     try:
-        # Attempt to download metadata (HEAD isn't supported directly by Supabase Storage3)
         tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
         if tile_data:
             return Response(status_code=200)
     except Exception as e:
-        logger.info(f"Tile not found in Supabase: {supabase_path} | {e}")
+        logger.info(f"Tile not found (HEAD): {supabase_path} | {e}")
 
     return Response(status_code=404)
 
