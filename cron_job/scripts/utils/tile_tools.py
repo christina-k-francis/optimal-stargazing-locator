@@ -123,7 +123,7 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colorm
 
             # Generate tiles from RGB GeoTIFF
             subprocess.run([
-                "gdal2tiles.py", "-z", "2-8", str(geo_path), str(tile_output_dir)
+                "gdal2tiles.py", "-z", "0-8", str(geo_path), str(tile_output_dir)
             ], check=True)
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
