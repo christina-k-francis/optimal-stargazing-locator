@@ -57,7 +57,7 @@ def colorize_and_tile(input_path, colormap="gnuplot2_r", vmin=15.75, vmax=22):
         tile_dir = pathlib.Path(tmpdir) / "tiles"
 
         subprocess.run(["gdal_translate", "-of", "VRT", str(rgb_tif), str(vrt_path)], check=True)
-        subprocess.run(["gdal2tiles.py", "-z", "2-8", "--profile=mercator", str(vrt_path), str(tile_dir)], check=True)
+        subprocess.run(["gdal2tiles.py", "-z", "0-8", "--profile=mercator", str(vrt_path), str(tile_dir)], check=True)
 
         for root, _, files in os.walk(tile_dir):
             for file in files:
