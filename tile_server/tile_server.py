@@ -138,6 +138,12 @@ async def head_tile(layer: str, timestamp: str, z: int, x: int, y: int):
         logger.warning(f"Supabase HEAD lookup failed: {e}")
         return Response(status_code=404, content="Tile not found (HEAD)")
 
+@app.head("/tiles/{path:path}")
+async def fallback_debug(path: str):
+    logger.warning(f"Unmatched HEAD request for tile: {path}")
+    return Response(status_code=404, content="Unmatched HEAD request")
+
+
 def serve_blank_tile(cache_path: Path):
     """Fetches and serves the blank transparent tile """
     try:
