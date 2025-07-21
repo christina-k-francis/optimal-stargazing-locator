@@ -69,10 +69,40 @@ CACHE_DIR.mkdir(exist_ok=True)
 CACHE_EXPIRY_SECONDS = 12 * 3600  # 12 hours
 
 # --- Tile Serving Endpoint --------------------------------------------------------------------
-@app.get("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
-async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
-    """Serve tile from cache or Supabase, flipping y to match Slippy Map."""
+# Route with timestamp
+@app.head("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
+async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y: int):
+    """HEAD request: check tile existence in cache and/or cloud, with y-flip for Slippy Map."""
+    slippy_y = (2 ** z) - 1 - y
+    logger.info(f"HEAD request → layer={layer}, timestamp={timestamp}, z={z}, x={x}, y={y} (slippy_y={slippy_y})")
+    
+    if layer not in LAYER_PATHS:
+        logger.warning(f"Invalid layer: {layer}")
+        return Response(status_code=404, content="Layer not found")
 
+    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
+    if local_path.exists():
+        logger.info(f"Tile found locally at {local_path}")
+        return Response(status_code=200)
+
+    if layer == "LightPollution_Tiles" and timestamp == "static":
+        supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
+    else:
+        supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
+
+    logger.info(f"Checking supabase path: {supabase_path}")
+    try:
+        tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
+        if tile_data:
+            logger.info(f"Tile found in supabase.")
+            return Response(status_code=200)
+    except Exception as e:
+        logger.warning(f"Supabase HEAD lookup failed: {e}")
+        return Response(status_code=404, content="Tile not found")
+    
+@app.get("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
+async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y: int):
+    """Serve tile from cache or Supabase, flipping y to match Slippy Map."""
     # Flip y value from TMS to Slippy format
     slippy_y = (2 ** z) - 1 - y
 
@@ -80,18 +110,18 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
         logger.warning(f"Invalid layer requested: {layer}")
         return Response(status_code=404, content="Layer not found")
 
+    headers = {
+        "Cache-Control": "public, max-age=604800",  # Cache for 7 days
+        "Content-Type": "image/png"
+    }
+
     # Local cache path
     local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
     local_path.parent.mkdir(parents=True, exist_ok=True)
     if local_path.exists():
         return StreamingResponse(open(local_path, "rb"), headers=headers)
-
-    headers = {
-        "Cache-Control": "public, max-age=604800",  # Cache for 7 days
-        "Content-Type": "image/png"
-    }
         
-    if layer == "LightPollution_Tiles":
+    if layer == "LightPollution_Tiles" and timestamp == "static":
         supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
     else:
         supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
@@ -107,43 +137,25 @@ async def get_tile(layer: str, timestamp: str, z: int, x: int, y: int):
 
     # Serve blank tile in place of missing data (also cache it locally)
     return serve_blank_tile(local_path)
-
-@app.head("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
-async def head_tile(layer: str, timestamp: str, z: int, x: int, y: int):
-    """HEAD request: check tile existence in cache and/or cloud, with y-flip for Slippy Map."""
-    slippy_y = (2 ** z) - 1 - y
-    logger.info(f"HEAD request → layer={layer}, timestamp={timestamp}, z={z}, x={x}, y={y} (slippy_y={slippy_y})")
     
-    if layer not in LAYER_PATHS:
-        logger.warning(f"Invalid layer: {layer}")
-        return Response(status_code=404, content="Layer not found")
+# Route without timestamp (e.g. static layers)
+@app.head("/tiles/{layer}/{z}/{x}/{y}.png")
+async def head_tile_static(layer: str, z: int, x: int, y: int):
+    timestamp = "static"
+    return await head_tile_with_timestamp(layer, timestamp, z, x, y)
 
-    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
-    if local_path.exists():
-        logger.info(f"Tile found locally at {local_path}")
-        return Response(status_code=200)
+@app.get("/tiles/{layer}/{z}/{x}/{y}.png")
+async def get_tile_static(layer: str, z: int, x: int, y: int):
+    timestamp = "static"
+    return await get_tile_with_timestamp(layer, timestamp, z, x, y)
 
-    if layer == "LightPollution_Tiles":
-        supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
-    else:
-        supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
-
-    logger.info(f"Checking supabase path: {supabase_path}")
-    try:
-        tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
-        if tile_data:
-            logger.info(f"Tile found in supabase.")
-            return Response(status_code=200)
-    except Exception as e:
-        logger.warning(f"Supabase HEAD lookup failed: {e}")
-        return Response(status_code=404, content="Tile not found (HEAD)")
-
+# Fallback Debugging Route
 @app.head("/tiles/{path:path}")
 async def fallback_debug(path: str):
     logger.warning(f"Unmatched HEAD request for tile: {path}")
     return Response(status_code=404, content="Unmatched HEAD request")
 
-
+# Funcion for serving missing/blank tiles
 def serve_blank_tile(cache_path: Path):
     """Fetches and serves the blank transparent tile """
     try:
@@ -164,7 +176,6 @@ def serve_blank_tile(cache_path: Path):
     except Exception as e:
         logger.error(f"Failed to fetch blank tile: {e}")
         return Response(status_code=500, content="Tile and fallback missing")
-
 
 # --- Health Check ----------------------------------------------------------------
 @app.get("/health")
