@@ -32,7 +32,7 @@ def download_geotiff():
         f.write(raw)
     return local_path
 
-def colorize_and_tile(input_path, colormap="cividis_r", vmin=15.75, vmax=22):
+def colorize_and_tile(input_path, colormap="gist_ncar_r", vmin=15.75, vmax=22):
     logger.info("Applying colormap and generating tiles...")
     with rasterio.open(input_path) as src:
         data = src.read(1)
