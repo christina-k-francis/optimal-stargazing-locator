@@ -3,6 +3,7 @@ import os
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from matplotlib import cm
 from matplotlib.colors import Normalize
 import tempfile
@@ -24,6 +25,14 @@ storage = create_client(f"{SUPABASE_URL}/storage/v1",
                         {"Authorization": f"Bearer {SUPABASE_KEY}"},
                         is_async=False)
 
+# Creating a custom colormap for displaying LP data
+original_cm = plt.get_cmap("gist_ncar_r")
+# extracting OG colormap colors as a list of RGBA values
+original_colors = original_cm(np.linspace(0,1,original_cm.N))
+# adding black to the end of the colormap
+new_colors = list(original_colors)+[[0,0,0,1]] # solid black in RGBA
+new_cm = ListedColormap(new_colors, name="gist_ncar_r_plus_black")
+
 def download_geotiff():
     logger.info("Downloading GeoTIFF from Supabase...")
     raw = storage.from_(BUCKET_NAME).download(REMOTE_PATH)
@@ -32,7 +41,7 @@ def download_geotiff():
         f.write(raw)
     return local_path
 
-def colorize_and_tile(input_path, colormap="cividis_r", vmin=15.75, vmax=22):
+def colorize_and_tile(input_path, colormap=new_cm, vmin=15.75, vmax=22):
     logger.info("Applying colormap and generating tiles...")
     with rasterio.open(input_path) as src:
         data = src.read(1)
