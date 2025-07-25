@@ -165,22 +165,6 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colorm
             gc.collect()
 
     gc.collect() # garbage collector
-
-def run_gdalinfo(tif_path):
-    try:
-        result = subprocess.run(
-            ["gdalinfo", str(tif_path)],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        print(result.stdout)  # or logger.info(result.stdout)
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        print("GDALInfo failed:", e.stderr)
-        return None
-
  
 def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="viridis"):
     """
@@ -236,6 +220,10 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
             if "y" in slice_2d.dims:
                 slice_2d = slice_2d.sortby("y", ascending=False)
 
+            # Modifying the step coord, so nanosecond units match values (scale values)
+            slice_2d['step'].values = slice_2d['step'].values / 3.6e12
+            slice_2d['step'].encoding['units'] = 'hours'
+
             # Drop 2D geographic coordinates to prevent reproject conflict
             slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
             # Reproject into Web Mercator
@@ -268,9 +256,6 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
                     ColorInterp.blue
 
                 )
-
-            # checking info of resultant geotiff
-            run_gdalinfo(geo_path)
 
             # Generate tiles from RGB GeoTIFF
             subprocess.run([
