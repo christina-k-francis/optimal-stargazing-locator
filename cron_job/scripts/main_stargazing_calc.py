@@ -23,7 +23,7 @@ import pytz
 import logging
 import warnings
 from utils.memory_logger import log_memory_usage
-from utils.tile_tools import generate_tiles_from_zarr 
+from utils.tile_tools import generate_stargazing_tiles 
 from utils.upload_download_tools import load_zarr_from_supabase,load_tiff_from_supabase,upload_zarr_dataset 
 
 
@@ -370,7 +370,7 @@ def main():
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
     # 6e. Save Staragazing DS as a tileset
-    generate_tiles_from_zarr(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
+    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
 
     
 # Let's execute this main function!
