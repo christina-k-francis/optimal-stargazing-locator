@@ -165,7 +165,79 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colorm
             gc.collect()
 
     gc.collect() # garbage collector
- 
+
+def rescale_timedelta_coords(ds, coord_name='time'):
+    """
+    Detects if the coordinate values are in nanoseconds and rescales them to
+    larger units avoid overflow.
+    Args:
+        ds (xarray.Dataset or xarray.DataArray): Input data.
+        coord_name (str): Coordinate to check (default='time').
+    Returns:
+        xarray.Dataset or xarray.DataArray: Updated object with rescaled coordinate.
+    """
+    if coord_name not in ds.coords:
+        print(f"Coordinate '{coord_name}' not found.")
+        return ds
+
+    coord = ds.coords[coord_name]
+
+    # Check if the values are excessively large (common for nanosecond overflow)
+    if np.abs(coord.values.astype('datetime64[ns]').astype(np.int64)) > 1e18:
+        one_hour = np.timedelta64(1, 'h')
+        coord.values = np.timedelta64(int(slice_2d['step'].values/one_hour))
+        
+        unit_start = str(coord.values.dtype).find('[')+1
+        unit_end = str(coord.values.dtype).find(']')
+        unit = str(coord.values.dtype)[unit_start:unit_end]
+        
+        if unit == 's':
+            coord.encoding['units'] = "seconds"
+            return coord
+        elif unit == 'm':
+            coord.encoding['units'] = "minutes"
+            return coord
+        elif unit == 'h':
+            coord.encoding['units'] = "hours"
+            return coord
+    else:
+        return coord  # No need to adjustdef rescale_timedelta_coords(ds, coord_name='time'):
+    """
+    Detects if the coordinate values are in nanoseconds and rescales them to
+    larger units avoid overflow.
+    Args:
+        ds (xarray.Dataset or xarray.DataArray): Input data.
+        coord_name (str): Coordinate to check (default='time').
+    Returns:
+        xarray.Dataset or xarray.DataArray: Updated object with rescaled coordinate.
+    """
+    if coord_name not in ds.coords:
+        print(f"Coordinate '{coord_name}' not found.")
+        return ds
+
+    coord = ds.coords[coord_name]
+
+    # Check if the values are excessively large (common for nanosecond overflow)
+    if np.abs(coord.values.astype('datetime64[ns]').astype(np.int64)) > 1e18:
+        one_hour = np.timedelta64(1, 'h')
+        coord.values = np.timedelta64(int(slice_2d['step'].values/one_hour))
+        
+        unit_start = str(coord.values.dtype).find('[')+1
+        unit_end = str(coord.values.dtype).find(']')
+        unit = str(coord.values.dtype)[unit_start:unit_end]
+        
+        if unit == 's':
+            coord.encoding['units'] = "seconds"
+            return coord
+        elif unit == 'm':
+            coord.encoding['units'] = "minutes"
+            return coord
+        elif unit == 'h':
+            coord.encoding['units'] = "hours"
+            return coord
+    else:
+        return coord  # No need to adjust
+
 def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="viridis"):
     """
     Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
@@ -220,9 +292,8 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
             if "y" in slice_2d.dims:
                 slice_2d = slice_2d.sortby("y", ascending=False)
 
-            # Modifying the step coord, so nanosecond units match values (scale values)
-            slice_2d['step'].values = slice_2d['step'].values / 3.6e12
-            slice_2d['step'].encoding['units'] = 'hours'
+            # Modifying the step coord to avoid overflow error
+            slice_2d['step'] = rescale_timedelta_coords(slice_2d, "step")
 
             # Drop 2D geographic coordinates to prevent reproject conflict
             slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
