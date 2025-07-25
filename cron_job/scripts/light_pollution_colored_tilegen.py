@@ -29,9 +29,9 @@ storage = create_client(f"{SUPABASE_URL}/storage/v1",
 original_cm = plt.get_cmap("gist_ncar_r")
 # extracting OG colormap colors as a list of RGBA values
 original_colors = original_cm(np.linspace(0,1,original_cm.N))
-# adding black to the end of the colormap
-new_colors = list(original_colors)+[[0,0,0,1]] # solid black in RGBA
-new_cm = ListedColormap(new_colors, name="gist_ncar_r_plus_black")
+# adding black and grey to the end of the colormap as RGBA values
+new_colors = list(original_colors)+[[105,105,105,1]]+[[0,0,0,1]] 
+new_cm = ListedColormap(new_colors, name="gist_ncar_r_plus")
 
 def download_geotiff():
     logger.info("Downloading GeoTIFF from Supabase...")
