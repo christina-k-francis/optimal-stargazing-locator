@@ -16,6 +16,7 @@ import logging
 import warnings
 import json
 import httpx
+from rasterio.enums import ColorInterp
 from storage3 import create_client
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
@@ -164,6 +165,22 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colorm
             gc.collect()
 
     gc.collect() # garbage collector
+
+def run_gdalinfo(tif_path):
+    try:
+        result = subprocess.run(
+            ["gdalinfo", str(tif_path)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        print(result.stdout)  # or logger.info(result.stdout)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print("GDALInfo failed:", e.stderr)
+        return None
+
  
 def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="viridis"):
     """
@@ -228,30 +245,9 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
             data = slice_2d.values
             norm = Normalize(vmin=-1, vmax=5)
             
-            # debug output start
-            print("min:", np.nanmin(data), "max:", np.nanmax(data), "unique:", np.unique(data), "shape:", data.shape)
-            logger.info(f"Timestep {i}: min={np.nanmin(data)}, max={np.nanmax(data)}")
-            # debugging output end
-            
             cmap = plt.colormaps[colormap_name]
             rgba_img = (cmap(norm(data)) * 255).astype("uint8")
             rgb_img = rgba_img[:, :, :3]  # Drop alpha
-
-            # debug output start
-            logger.info(f"Slice shape: {data.shape}")
-            logger.info(f"Transform: {slice_2d.rio.transform()}")
-            
-            plt.figure(figsize=(10, 6))
-            plt.imshow(data, cmap=colormap_name, vmin=-1, vmax=5)
-            plt.colorbar()
-            plt.title(f"Timestep {i}: Raw Data Slice")
-            plt.show()
-
-            plt.figure(figsize=(10, 6))
-            plt.imshow(rgb_img)
-            plt.title(f"Timestep {i}: RGB Image Preview")
-            plt.show()
-            # debug output end
 
             with rasterio.open(
                 geo_path,
@@ -266,13 +262,15 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
             ) as dst:
                 for band in range(3):
                     dst.write(rgb_img[:, :, band], band + 1)
+                dst.colorinterp = (
+                    ColorInterp.red,
+                    ColorInterp.green,
+                    ColorInterp.blue
 
-            # debug output start
-            print("RGB max:", np.max(rgb_img), "min:", np.min(rgb_img))
-            plt.imshow(rgb_img)
-            plt.title(f"Timestep {i} RGB Preview")
-            plt.show()
-            # debug output end
+                )
+
+            # checking info of resultant geotiff
+            run_gdalinfo(geo_path)
 
             # Generate tiles from RGB GeoTIFF
             subprocess.run([
