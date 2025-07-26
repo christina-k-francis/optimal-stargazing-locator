@@ -370,7 +370,7 @@ def main():
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
     # 6e. Save Staragazing DS as a tileset
-    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
+    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2")
 
     
 # Let's execute this main function!
