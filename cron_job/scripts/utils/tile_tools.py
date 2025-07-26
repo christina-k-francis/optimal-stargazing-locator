@@ -297,6 +297,8 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
 
             # Drop 2D geographic coordinates to prevent reproject conflict
             slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
+            # Remedying any potential chunking errors
+            slice_2d = slice_2d.compute() # high memory cost
             # Reproject into Web Mercator
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
 

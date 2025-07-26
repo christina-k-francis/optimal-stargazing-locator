@@ -360,6 +360,12 @@ def main():
     stargazing_ds = xr.merge([stargazing_index.rename("index"),
                               stargazing_grades.rename("grade_num")],
                              combine_attrs='no_conflicts')
+    
+    # Remedying likely chunk mismatching
+    stargazing_ds = stargazing_ds.chunk(target_chunks)
+    for var in stargazing_ds.data_vars:
+        stargazing_ds[var].encoding.clear()
+
     # Passing on GRIB attribute data as well
     stargazing_ds.attrs.update((stargazing_ds.attrs | skycover_da.attrs))
 
