@@ -14,6 +14,7 @@ import logging
 import warnings
 import mimetypes
 import requests
+import shutil
 from storage3 import create_client
 
 logger = logging.getLogger(__name__)
@@ -48,9 +49,11 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
                             {"Authorization": f"Bearer {api_key}"},
                             is_async=False)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    tmpdir = tempfile.mkdtemp()
+    try:
         zarr_path = os.path.join(tmpdir, "data.zarr")
         logger.info("Writing dataset to Zarr...")
+        nws_ds.load()  # force all lazy computations
         nws_ds.to_zarr(zarr_path, mode="w", consolidated=True)
 
         logger.info("Uploading Zarr dataset to Supabase...")
@@ -83,6 +86,12 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
                         else:
                             logger.error(f"Final failure uploading {relative_path}")
         logger.info("✅ Zarr dataset uploaded to Supabase successfully.")
+    finally:
+        try:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception as e:
+            logger.warning(f"Tmpdir cleanup failed: {e}")
+
 
 def download_grib_with_retries(url, variable_key, max_retries=5, timeout=90):
     """

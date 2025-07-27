@@ -55,13 +55,16 @@ def main():
     
     # 1a. import precipitation probability dataset
     precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
+    precip_da.load()
     log_memory_usage("After importing precip data")
     # 1b. import sky coverage dataset
     skycover_da = load_zarr_from_supabase("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
+    skycover_da.load()
     log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
     lightpollution_da = load_tiff_from_supabase("maps",
                         "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
+    lightpollution_da.load()
     # define coordinate system, clip to United States, assign lat and lon xr coords
     lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
     lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
