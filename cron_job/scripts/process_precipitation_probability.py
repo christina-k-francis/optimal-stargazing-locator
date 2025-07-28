@@ -5,7 +5,6 @@ Both are uploaded to the cloud.
 """
 
 from nws_precipitation_probability_download import get_precip_probability
-from pypalettes import load_cmap
 from utils.gif_tools import create_nws_gif
 from utils.tile_tools import generate_tiles_from_zarr
 from utils.memory_logger import log_memory_usage
@@ -14,7 +13,7 @@ import gc
 def main():
     log_memory_usage("Start of Precipitation Prob. Processing Script")
     ds = get_precip_probability()
-    create_nws_gif(ds, load_cmap("LightBluetoDarkBlue_7"), "Precipitation Probability (%)",
+    create_nws_gif(ds, "ocean_r", "Precipitation Probability (%)",
                     "Precipitation Probability")
     generate_tiles_from_zarr(ds, "precip_probability", "data-layer-tiles/PrecipProb_Tiles", 0.01, "ocean_r")
     del ds

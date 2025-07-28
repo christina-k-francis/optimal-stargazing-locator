@@ -184,9 +184,11 @@ def main():
     logger.info("Uploading Moon Dataset/GIF/Tileset to Cloud...")
     upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
     # 4c. Create GIF of Moon Data
-    create_nws_gif(moonlight_da, "bone_r", "Moonlight (%)",
+    logger.info("Creating GIF of moonlight data")
+    create_nws_gif(moonlight_da, "gist_yarg", "Moonlight (%)",
                     "Moon Illumination + Altitude")
     # 4d. Saving Moon Data as a Tileset
+    logger.info("Generating Tileset of Moon Data")
     generate_tiles_from_zarr(moonlight_da, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
     
     gc.collect # garbage collector. deletes data no longer in use
@@ -385,7 +387,14 @@ def main():
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
     # 6e. Save Staragazing DS as a tileset
-    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2")
+    logger.info("Generating Stargazing Tileset")
+    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), 
+                              "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2")
+
+    # 6f. Saving a GIF of stargazing condition grades
+    create_nws_gif(stargazing_ds['grade_num'], "gnuplot2", "Stargazing Grades",
+                    "Stargazing Conditions Evaluation Grades")
+
 
     
 # Let's execute this main function!

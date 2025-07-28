@@ -5,7 +5,6 @@ Both are uploaded to the cloud.
 """
 
 import xarray as xr
-from pypalettes import load_cmap
 import gc
 from nws_sky_coverage_download import get_sky_coverage
 from pypalettes import load_cmap
@@ -17,7 +16,7 @@ def main():
     log_memory_usage("Start of Sky Cover Processing Script")
     ds = get_sky_coverage()
     log_memory_usage("After importing sky cover dataset")
-    create_nws_gif(ds, load_cmap("Bmsurface"), "Percentage of Sky Covered by Clouds", "Cloud Coverage")
+    create_nws_gif(ds, "bone_r", "Percentage of Sky Covered by Clouds", "Cloud Coverage")
     log_memory_usage("After creating sky cover gif")
     generate_tiles_from_zarr(ds, "cloud_coverage", "data-layer-tiles/SkyCover_Tiles", 0.005, "bone_r")
     log_memory_usage("After generating sky cover tileset")
