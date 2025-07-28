@@ -22,8 +22,9 @@ from skyfield.api import load, wgs84
 import pytz
 import logging
 import warnings
+from utils.gif_tools import create_nws_gif
 from utils.memory_logger import log_memory_usage
-from utils.tile_tools import generate_stargazing_tiles 
+from utils.tile_tools import generate_stargazing_tiles, generate_tiles_from_zarr
 from utils.upload_download_tools import load_zarr_from_supabase,load_tiff_from_supabase,upload_zarr_dataset 
 
 
@@ -180,8 +181,13 @@ def main():
     log_memory_usage("After calculating Moon data")    
 
     # 4b. Save Moon Illumination+Altitude data as zarr file
-    logger.info("Uploading Moon Dataset to Cloud...")
+    logger.info("Uploading Moon Dataset/GIF/Tileset to Cloud...")
     upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
+    # 4c. Create GIF of Moon Data
+    create_nws_gif(moonlight_da, "bone_r", "Moonlight (%)",
+                    "Moon Illumination + Altitude")
+    # 4d. Saving Moon Data as a Tileset
+    generate_tiles_from_zarr(moonlight_da, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
     
     gc.collect # garbage collector. deletes data no longer in use
 
