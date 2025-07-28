@@ -321,7 +321,7 @@ def main():
     
         def numeric_grade(value):
             if np.isnan(value):
-                return -1  # NA
+                return np.nan  # NA
             elif value <= p[0]:
                 return 0  # A+
             elif value <= p[1]:
@@ -343,7 +343,7 @@ def main():
         )
     
         grades.attrs["legend"] = {
-            -1: "NA",
+            np.nan: "NA",
              0: "A+",
              1: "A",
              2: "B",
@@ -389,10 +389,10 @@ def main():
     # 6e. Save Staragazing DS as a tileset
     logger.info("Generating Stargazing Tileset")
     generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), 
-                              "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2")
+                              "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
 
     # 6f. Saving a GIF of stargazing condition grades
-    create_nws_gif(stargazing_ds['grade_num'], "gnuplot2", "Stargazing Grades",
+    create_nws_gif(stargazing_ds['grade_num'], "gnuplot2_r", "Stargazing Grades",
                     "Stargazing Conditions Evaluation Grades")
 
 
