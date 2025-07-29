@@ -403,6 +403,10 @@ def main():
     
     # 6d. Save Stargazing DS as zarr file
     logger.info("Uploading Stargazing Evaluation Dataset to Cloud...")
+    # Convert all integer-typed DataArrays in the dataset to float
+    for var in stargazing_ds.data_vars:
+        if np.issubdtype(stargazing_ds[var].dtype, np.integer):
+            stargazing_ds[var] = stargazing_ds[var].astype("float32")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
     # 6e. Save Staragazing DS as a tileset
