@@ -49,30 +49,14 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
 logging.getLogger("supabase").setLevel(logging.WARNING)  
 
+
 def main():
     log_memory_usage("At start of main script")
+    
     # 1. IMPORT RELEVANT DATA
     logger.info('Importing meteorological and astronomical data...')   
     
-    # 1a. import precipitation probability dataset
-    precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
-    precip_da.load()
-    log_memory_usage("After importing precip data")
-    # 1b. import sky coverage dataset
-    skycover_da = load_zarr_from_supabase("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
-    skycover_da.load()
-    log_memory_usage("After importing cloud cover data")
-    # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
-    lightpollution_da = load_tiff_from_supabase("maps",
-                        "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
-    lightpollution_da.load()
-    # define coordinate system, clip to United States, assign lat and lon xr coords
-    lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
-    lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
-    lightpollution_da = lightpollution_da.rename({'x': 'longitude', 'y': 'latitude'})
-    log_memory_usage("After importing light pollution data")
-    
-    # 1d. Import astronomy data from skyfield
+    # 1a. Importing and preprocessing Moon illumination and altitude data
     # Load ephemeris data
     # ephemeris: the calculated positions of a celestial body over time documented in a data file
     eph = load('de421.bsp')
@@ -82,8 +66,103 @@ def main():
     # Coarse grid definition
     coarse_lats = np.linspace(24, 50, 25)  # ~1 degree resolution
     coarse_lons = np.linspace(-125, -66, 30)
+    
+    # Using a reference auxillary dataset for interpolation and forecast
+    rhum_da = load_zarr_from_supabase("maps", "processed-data/RelHum_Latest.zarr")['unknown']
+    rhum_da.load()
+    
+    # Mountain Time zone - NWS data is in MT
+    mountain_tz = pytz.timezone("US/Mountain")
+    # Desired 6-hourly time steps
+    time_steps = rhum_da["valid_time"].values
+    # Initialize output array
+    moonlight_array = np.zeros((len(time_steps), len(coarse_lats),
+                                len(coarse_lons)), dtype=np.float32)
+ 
+    # Calculate Moon Illumination over coarse grid
+    for i, datetime in enumerate(time_steps):
+        # Timestamps are in Mountain Time but naive — explicitly localize as Mountain Time
+        aware_dt_mt = pd.to_datetime(datetime).tz_localize(mountain_tz)
+        # Convert to Skyfield compatible UTC
+        aware_dt_utc = aware_dt_mt.astimezone(pytz.UTC)
+        t_sf = ts.utc(aware_dt_utc)
+    
+        for lat_i, lat in enumerate(coarse_lats):
+            for lon_j, lon in enumerate(coarse_lons):
+                observer = wgs84.latlon(lat, lon)
+                obs = earth + observer
+    
+                astrometric = obs.at(t_sf).observe(moon)
+                # Moon Altitude
+                alt, az, _ = astrometric.apparent().altaz()
+                # Illumination fraction of moon
+                illum = astrometric.apparent().fraction_illuminated(sun)
+    
+                # Assign illumination if moon is above horizon
+                if alt.degrees > 0:
+                    moonlight_array[i, lat_i, lon_j] = illum
+                else:
+                    moonlight_array[i, lat_i, lon_j] = 0.0
+    
+    moonlight_coarse = xr.DataArray(
+        moonlight_array,
+        dims=["step", "latitude", "longitude"],
+        coords={
+            "valid_time": ("step", time_steps),
+            "latitude": ('latitude', coarse_lats),
+            "longitude": ('longitude', coarse_lons),
+            "step": np.arange(len(time_steps))
+        },
+        name="moonlight"
+    )
+    # Interpolate to match full-resolution grid
+    moonlight_da = moonlight_coarse.interp(
+        latitude=rhum_da.latitude,
+        longitude=rhum_da.longitude,
+        method="linear"
+    )
+    log_memory_usage("After calculating Moon data")    
 
+    # 4b. Save Moon Illumination+Altitude data as zarr file
+    logger.info("Uploading Moon Dataset/GIF/Tileset to Cloud...")
+    upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
+    # 4c. Create GIF of Moon Data
+    logger.info("Creating GIF of moonlight data")
+    create_moon_gif((moonlight_da*100), "gist_yarg", "Moonlight (%)",
+                    "Moon Illumination")
+    # 4d. Saving Moon Data as a Tileset
+    logger.info("Generating Tileset of Moon Data")
+    # Rename dimensions and assign coordinates properly
+    moonlight_regrid = (
+        moonlight_da
+        .rename({'latitude': 'y', 'longitude': 'x'})
+        .assign_coords({
+            'x': moonlight_da.longitude.data,
+            'y': moonlight_da.latitude.data
+        })
+    )
+    generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
+    
     gc.collect # garbage collector. deletes data no longer in use
+
+    # 1b. import precipitation probability dataset
+    precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
+    precip_da.load()
+    log_memory_usage("After importing precip data")
+    # 1c. import sky coverage dataset
+    skycover_da = load_zarr_from_supabase("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
+    skycover_da.load()
+    log_memory_usage("After importing cloud cover data")
+    # 1d. import High-Res Artificial Night Sky Brightness data from David Lorenz 
+    lightpollution_da = load_tiff_from_supabase("maps",
+                        "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
+    lightpollution_da.load()
+    # define coordinate system, clip to United States, assign lat and lon xr coords
+    lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
+    lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
+    lightpollution_da = lightpollution_da.rename({'x': 'longitude', 'y': 'latitude'})
+    log_memory_usage("After importing light pollution data")
+    
     logger.info("Normalizing + Preprocessing Datasets...")
     
     # 2. NORMALIZE SKY COVERAGE DATA ON 0-1 SCALE
@@ -132,76 +211,7 @@ def main():
     mountain_tz = pytz.timezone("US/Mountain")
     # Desired 6-hourly time steps
     time_steps = skycover_da_norm["valid_time"].values
-    # Initialize output array
-    moonlight_array = np.zeros((len(time_steps), len(coarse_lats),
-                                len(coarse_lons)), dtype=np.float32)
     
-    # Calculate Moon Illumination over coarse grid
-    for i, datetime in enumerate(time_steps):
-        # Timestamps are in Mountain Time but naive — explicitly localize as Mountain Time
-        aware_dt_mt = pd.to_datetime(datetime).tz_localize(mountain_tz)
-        # Convert to Skyfield compatible UTC
-        aware_dt_utc = aware_dt_mt.astimezone(pytz.UTC)
-        t_sf = ts.utc(aware_dt_utc)
-    
-        for lat_i, lat in enumerate(coarse_lats):
-            for lon_j, lon in enumerate(coarse_lons):
-                observer = wgs84.latlon(lat, lon)
-                obs = earth + observer
-    
-                astrometric = obs.at(t_sf).observe(moon)
-                # Moon Altitude
-                alt, az, _ = astrometric.apparent().altaz()
-                # Illumination fraction of moon
-                illum = astrometric.apparent().fraction_illuminated(sun)
-    
-                # Assign illumination if moon is above horizon
-                if alt.degrees > 0:
-                    moonlight_array[i, lat_i, lon_j] = illum
-                else:
-                    moonlight_array[i, lat_i, lon_j] = 0.0
-    
-    moonlight_coarse = xr.DataArray(
-        moonlight_array,
-        dims=["step", "latitude", "longitude"],
-        coords={
-            "valid_time": ("step", time_steps),
-            "latitude": ('latitude', coarse_lats),
-            "longitude": ('longitude', coarse_lons),
-            "step": skycover_da_norm['step'].data
-        },
-        name="moonlight"
-    )
-    # Interpolate to match full-resolution grid
-    moonlight_da = moonlight_coarse.interp(
-        latitude=skycover_da_norm.latitude,
-        longitude=skycover_da_norm.longitude,
-        method="linear"
-    )
-    log_memory_usage("After calculating Moon data")    
-
-    # 4b. Save Moon Illumination+Altitude data as zarr file
-    logger.info("Uploading Moon Dataset/GIF/Tileset to Cloud...")
-    upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
-    # 4c. Create GIF of Moon Data
-    logger.info("Creating GIF of moonlight data")
-    create_moon_gif((moonlight_da*100), "gist_yarg", "Moonlight (%)",
-                    "Moon Illumination")
-    # 4d. Saving Moon Data as a Tileset
-    logger.info("Generating Tileset of Moon Data")
-    # Rename dimensions and assign coordinates properly
-    moonlight_regrid = (
-        moonlight_da
-        .rename({'latitude': 'y', 'longitude': 'x'})
-        .assign_coords({
-            'x': moonlight_da.longitude.data,
-            'y': moonlight_da.latitude.data
-        })
-    )
-    generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
-    
-    gc.collect # garbage collector. deletes data no longer in use
-
     logger.info('Preprocessing high-res light pollution data...')
     log_memory_usage("Before calculating light pollution data")
 
