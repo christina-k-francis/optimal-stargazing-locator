@@ -68,7 +68,7 @@ def main():
     coarse_lons = np.linspace(-125, -66, 30)
     
     # Using a reference auxillary dataset for interpolation and forecast
-    rhum_da = load_zarr_from_supabase("maps", "processed-data/RelHum_Latest.zarr")['unknown']
+    rhum_da = load_zarr_from_supabase("maps", "processed-data/RelHum_Latest.zarr")['r2']
     rhum_da.load()
     
     # Mountain Time zone - NWS data is in MT
