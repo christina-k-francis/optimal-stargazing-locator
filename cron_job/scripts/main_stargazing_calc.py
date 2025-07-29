@@ -137,8 +137,8 @@ def main():
         moonlight_da
         .rename({'latitude': 'y', 'longitude': 'x'})
         .assign_coords({
-            'x': moonlight_da.longitude.data,
-            'y': moonlight_da.latitude.data
+            'x': ('x', moonlight_da.longitude.data),
+            'y': ('y', moonlight_da.latitude.data)
         })
     )
     generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
