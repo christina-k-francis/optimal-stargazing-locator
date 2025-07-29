@@ -275,26 +275,33 @@ def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_na
 
     for i, timestep in enumerate(ds.step.values):
         logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
-        slice_2d = ds.isel(step=i)
+        
+        # Select 2D slice
+        slice_2d = ds.isel(step=i).squeeze(drop=True)  # shape: (y, x)
+        # Compute if needed
+        slice_2d = slice_2d.compute()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
-            # Remedying any potential chunking errors
-            slice_2d = slice_2d.compute() # high memory cost
-            # Assign CRS and transform
-            slice_2d.rio.write_crs("EPSG:4326", inplace=True)
+            # Explicitly name spatial dimensions
+            slice_2d = slice_2d.rename({"x": "x", "y": "y"})
+            
+            # Ensure CRS + Transform are assigned
             transform = get_affine_transform_from_coords(slice_2d)
+            slice_2d.rio.write_crs("EPSG:4326", inplace=True)
             slice_2d.rio.write_transform(transform, inplace=True)
-            
-            logger.info(f" slice_2d transform: {slice_2d.rio.transform()}")
-            logger.info(f"slice_2d crs: {slice_2d.rio.crs}")
-
-            
-            # Reproject into Web Mercator
+        
+            logger.info(f"Transform: {slice_2d.rio.transform()}")
+            logger.info(f"CRS: {slice_2d.rio.crs}")
+        
+            # Confirm required spatial dims exist
+            assert "x" in slice_2d.dims and "y" in slice_2d.dims, "Missing spatial dims"
+        
+            # Reproject
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
-
+            
             # Apply colormap and save as RGB GeoTIFF
             data = slice_2d.values
             norm = Normalize(vmin=0, vmax=1)
