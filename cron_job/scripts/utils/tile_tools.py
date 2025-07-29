@@ -287,6 +287,11 @@ def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_na
             slice_2d.rio.write_crs("EPSG:4326", inplace=True)
             transform = get_affine_transform_from_coords(slice_2d)
             slice_2d.rio.write_transform(transform, inplace=True)
+            
+            logger.info(f" slice_2d transform: {slice_2d.rio.transform()}")
+            logger.info(f"slice_2d crs: {slice_2d.rio.crs}")
+
+            
             # Reproject into Web Mercator
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
