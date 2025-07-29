@@ -125,35 +125,35 @@ def main():
     log_memory_usage("After calculating Moon data")    
 
     # 4b. Save Moon Illumination+Altitude data as zarr file
-    logger.info("Uploading Moon Dataset/GIF/Tileset to Cloud...")
+    logger.info("Uploading Moon Dataset to Cloud...")
     upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
     # 4c. Create GIF of Moon Data
-    logger.info("Creating GIF of moonlight data")
-    create_moon_gif((moonlight_da*100), "gist_yarg", "Moonlight (%)",
-                    "Moon Illumination")
+    #logger.info("Creating GIF of moonlight data")
+    #create_moon_gif((moonlight_da*100), "gist_yarg", "Moonlight (%)",
+    #                "Moon Illumination")
     # 4d. Saving Moon Data as a Tileset
-    logger.info("Generating Tileset of Moon Data")
+    #logger.info("Generating Tileset of Moon Data")
     # Rename dimensions and assign coordinates properly
-    moonlight_regrid = (
-        moonlight_da.rename({'latitude': 'y', 'longitude': 'x'})
-        )
+    #moonlight_regrid = (
+     #   moonlight_da.rename({'latitude': 'y', 'longitude': 'x'})
+     #   )
     
     # Get bounds from coordinates
-    left = float(moonlight_regrid.x.min())
-    right = float(moonlight_regrid.x.max())
-    bottom = float(moonlight_regrid.y.min())
-    top = float(moonlight_regrid.y.max())
+    #left = float(moonlight_regrid.x.min())
+    #right = float(moonlight_regrid.x.max())
+    #bottom = float(moonlight_regrid.y.min())
+    #top = float(moonlight_regrid.y.max())
 
     # Get dimensions
-    step, height, width = moonlight_regrid.shape
+    #step, height, width = moonlight_regrid.shape
 
     # Create affine transform
-    transform = rasterio.transform.from_bounds(left, bottom, right, top, width, height)
+    #transform = rasterio.transform.from_bounds(left, bottom, right, top, width, height)
 
     # Assign it to the DataArray
-    moonlight_regrid.rio.write_transform(transform, inplace=True)
+    #moonlight_regrid.rio.write_transform(transform, inplace=True)
 
-    generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
+    #generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
     
     gc.collect # garbage collector. deletes data no longer in use
 
