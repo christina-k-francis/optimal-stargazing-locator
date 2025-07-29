@@ -22,6 +22,7 @@ from skyfield.api import load, wgs84
 import pytz
 import logging
 import warnings
+import rasterio.transform
 from utils.gif_tools import create_nws_gif, create_moon_gif
 from utils.memory_logger import log_memory_usage
 from utils.tile_tools import generate_stargazing_tiles, generate_moon_tiles
@@ -131,12 +132,28 @@ def main():
     create_moon_gif((moonlight_da*100), "gist_yarg", "Moonlight (%)",
                     "Moon Illumination")
     # 4d. Saving Moon Data as a Tileset
-    #logger.info("Generating Tileset of Moon Data")
+    logger.info("Generating Tileset of Moon Data")
     # Rename dimensions and assign coordinates properly
-    #moonlight_regrid = (
-     #   moonlight_da.rename({'latitude': 'y', 'longitude': 'x'})
-     #   )
-    #generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
+    moonlight_regrid = (
+        moonlight_da.rename({'latitude': 'y', 'longitude': 'x'})
+        )
+    
+    # Get bounds from coordinates
+    left = float(moonlight_regrid.x.min())
+    right = float(moonlight_regrid.x.max())
+    bottom = float(moonlight_regrid.y.min())
+    top = float(moonlight_regrid.y.max())
+
+    # Get dimensions
+    height, width = moonlight_regrid.shape
+
+    # Create affine transform
+    transform = rasterio.transform.from_bounds(left, bottom, right, top, width, height)
+
+    # Assign it to the DataArray
+    moonlight_regrid.rio.write_transform(transform, inplace=True)
+
+    generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
     
     gc.collect # garbage collector. deletes data no longer in use
 
@@ -321,6 +338,9 @@ def main():
     if 'chunks' in stargazing_index['valid_time'].encoding:
         del stargazing_index['valid_time'].encoding['chunks']
     log_memory_usage("After calculating the Stargazing Index")
+    
+    logger.info('Saving non-letter grade ds for troubleshooting')
+    upload_zarr_dataset(stargazing_index, 'processed-data/Stargazing_Index.zarr')
         
     logger.info('Converting to Letter Grades...')    
     # 6b. Convert Stargazing Indices to Letter Grades

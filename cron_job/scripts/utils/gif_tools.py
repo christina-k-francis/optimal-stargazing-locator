@@ -171,6 +171,7 @@ def create_moon_gif(moon_ds, cmap, cbar_label, data_title):
         ax.set_title(f"{data_title} on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
         img = fig2img(fig)
         images.append(img)
+        log_memory_usage(f"After plotting frame {time_step+1}/{len(moon_ds.step.values)}")
         plt.close(fig)
         gc.collect()
 
