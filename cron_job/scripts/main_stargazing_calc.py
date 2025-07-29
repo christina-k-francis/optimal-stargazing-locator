@@ -134,13 +134,8 @@ def main():
     logger.info("Generating Tileset of Moon Data")
     # Rename dimensions and assign coordinates properly
     moonlight_regrid = (
-        moonlight_da
-        .rename({'latitude': 'y', 'longitude': 'x'})
-        .assign_coords({
-            'x': ('x', moonlight_da.longitude.data),
-            'y': ('y', moonlight_da.latitude.data)
-        })
-    )
+        moonlight_da.rename({'latitude': 'y', 'longitude': 'x'})
+        )
     generate_moon_tiles(moonlight_regrid, "moon_illumination", "data-layer-tiles/Moon_Tiles", 0.01, "gist_yarg")
     
     gc.collect # garbage collector. deletes data no longer in use
