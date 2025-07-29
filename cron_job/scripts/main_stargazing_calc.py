@@ -145,7 +145,7 @@ def main():
     top = float(moonlight_regrid.y.max())
 
     # Get dimensions
-    height, width = moonlight_regrid.shape
+    step, height, width = moonlight_regrid.shape
 
     # Create affine transform
     transform = rasterio.transform.from_bounds(left, bottom, right, top, width, height)
