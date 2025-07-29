@@ -185,7 +185,7 @@ def rescale_timedelta_coords(ds, coord_name='time'):
     # Check if the values are excessively large (common for nanosecond overflow)
     if np.abs(coord.values.astype('datetime64[ns]').astype(np.int64)) > 1e18:
         one_hour = np.timedelta64(1, 'h')
-        coord.values = np.timedelta64(int(slice_2d['step'].values/one_hour))
+        coord.values = np.timedelta64(int(ds['step'].values/one_hour))
         
         unit_start = str(coord.values.dtype).find('[')+1
         unit_end = str(coord.values.dtype).find(']')
@@ -220,7 +220,7 @@ def rescale_timedelta_coords(ds, coord_name='time'):
     # Check if the values are excessively large (common for nanosecond overflow)
     if np.abs(coord.values.astype('datetime64[ns]').astype(np.int64)) > 1e18:
         one_hour = np.timedelta64(1, 'h')
-        coord.values = np.timedelta64(int(slice_2d['step'].values/one_hour))
+        coord.values = np.timedelta64(int(ds['step'].values/one_hour))
         
         unit_start = str(coord.values.dtype).find('[')+1
         unit_end = str(coord.values.dtype).find(']')
@@ -262,6 +262,16 @@ def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_na
     bucket_name = "maps"
     MAX_RETRIES = 5
     DELAY_BETWEEN_RETRIES = 2
+    
+    def get_affine_transform_from_coords(da):
+        x = da.x.values
+        y = da.y.values
+    
+        res_x = (x[-1] - x[0]) / (len(x) - 1)
+        res_y = (y[0] - y[-1]) / (len(y) - 1)  # y should decrease from top to bottom
+    
+        transform = affine.Affine.translation(x[0] - res_x / 2, y[0] - res_y / 2) * affine.Affine.scale(res_x, -res_y)
+        return transform 
 
     for i, timestep in enumerate(ds.step.values):
         logger.info(f"Processing timestep {i+1}/{len(ds.step.values)}")
@@ -273,8 +283,10 @@ def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_na
 
             # Remedying any potential chunking errors
             slice_2d = slice_2d.compute() # high memory cost
-            # Assign CRS
+            # Assign CRS and transform
             slice_2d.rio.write_crs("EPSG:4326", inplace=True)
+            transform = get_affine_transform_from_coords(slice_2d)
+            slice_2d.rio.write_transform(transform, inplace=True)
             # Reproject into Web Mercator
             slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
