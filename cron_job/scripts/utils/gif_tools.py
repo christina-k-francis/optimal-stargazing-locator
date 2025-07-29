@@ -77,11 +77,11 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title):
 def create_nws_temp_gif(temp_ds, cmap, cbar_label):
     # Creating Forecast GIF - requires custom code
     images = []
-    for time_step in range(len(temp_ds.step.values)): # type: ignore
+    for time_step in range(len(temp_ds.step.values)):
         # unique plotting variables
-        plotting_data = temp_ds['fahrenheit'][time_step] # type: ignore
-        lat2d = temp_ds.latitude # type: ignore
-        lon2d = temp_ds.longitude # type: ignore
+        plotting_data = temp_ds['fahrenheit'][time_step]
+        lat2d = temp_ds.latitude 
+        lon2d = temp_ds.longitude 
         # celsius equivalents to fahrenheit
         ticks_f = np.arange(0,101,10)
         ticks_c = (ticks_f - 32) * 5 / 9
@@ -91,13 +91,13 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label):
         plot = ax.pcolormesh(lon2d, lat2d, plotting_data, cmap=cmap,
                              vmin=0, vmax=100)
         # map features
-        gl = ax.gridlines(draw_labels=True, x_inline=False, # type: ignore
+        gl = ax.gridlines(draw_labels=True, x_inline=False, 
                           y_inline=False, linewidth=0.5)  
         gl.top_labels=False 
         ax.add_feature(cfeature.STATES, # type: ignore
                        edgecolor='gray', linewidth=0.5)
-        ax.add_feature(cfeature.BORDERS, linestyle=':') # type: ignore
-        ax.coastlines(resolution='110m', zorder=3)  # type: ignore
+        ax.add_feature(cfeature.BORDERS, linestyle=':') 
+        ax.coastlines(resolution='110m', zorder=3)  
         # Defining dual-unit colorbar
         cbar = plt.colorbar(plot, ax=ax, orientation='vertical',
                             pad=0.125, format='%.0f°F', ticks=ticks_f)
@@ -148,3 +148,49 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label):
     del gif_buffer
     log_memory_usage("After uploading Temperature GIF to supabase")
     gc.collect # garbage collector. deletes data no longer in use
+        
+def create_moon_gif(moon_ds, cmap, cbar_label, data_title):
+    ticks = np.arange(0,101,10)
+    images = []
+    for time_step in range(len(moon_ds.step.values)):
+        plotting_data = moon_ds[time_step]
+        lat2d = moon_ds.latitude
+        lon2d = moon_ds.longitude
+        fig = plt.figure(figsize=(12,6))
+        ax = fig.add_subplot(1,1,1, projection=ccrs.PlateCarree())
+        plt.pcolormesh(lon2d, lat2d, plotting_data, cmap=cmap)
+        gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False, linewidth=0.5) # type: ignore
+        ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) # type: ignore
+        ax.add_feature(cfeature.BORDERS, linestyle=':') 
+        ax.coastlines(resolution='110m', zorder=3)
+        gl.top_labels=False
+        plt.clim(0,100)
+        plt.colorbar(ax=ax, orientation='vertical', pad=0.1, ticks=ticks,
+                     label=f'{cbar_label}', extend='neither')
+        local_dt = pd.to_datetime(plotting_data.valid_time.values).tz_localize(mountain_tz)
+        ax.set_title(f"{data_title} on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
+        img = fig2img(fig)
+        images.append(img)
+        plt.close(fig)
+        gc.collect()
+
+    gif_buffer = io.BytesIO()
+    images[0].save(gif_buffer, format='GIF', save_all=True,
+                   append_images=images[1:], duration=350, loop=0)
+    gif_buffer.seek(0)
+
+    api_key = os.environ['SUPABASE_KEY']
+    if not api_key:
+        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"}, is_async=False)
+
+    storage_path_prefix = f"plots/{data_title}_Latest.gif"
+    storage.from_("maps").upload(
+        storage_path_prefix,
+        gif_buffer.read(),
+        {"content-type": "image/gif", "x-upsert": "true"}
+    )
+    gif_buffer.close()
+    del gif_buffer
+    gc.collect()
