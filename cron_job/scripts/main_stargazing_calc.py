@@ -341,7 +341,8 @@ def main():
     
     logger.info('Saving non-letter grade ds for troubleshooting')
     upload_zarr_dataset(stargazing_index, 'processed-data/Stargazing_Index.zarr')
-        
+    logger.info(f'index sum = {np.sum(stargazing_index.values)}')    
+    
     logger.info('Converting to Letter Grades...')    
     # 6b. Convert Stargazing Indices to Letter Grades
     # Letter grades are stored numerically to ensure frontend compatibility
