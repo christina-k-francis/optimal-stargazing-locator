@@ -303,9 +303,9 @@ def main():
     logger.info('Converting to Letter Grades...')    
     # 6b. Convert Stargazing Indices to Letter Grades
     # Letter grades are stored numerically to ensure frontend compatibility
-    def index_to_grade_calc(index_data):
+    def index_to_grade_calc(index_da):
         # Flatten and drop NaNs
-        flat_values = index_data.values.flatten()
+        flat_values = index_da.values.flatten()
         valid_values = flat_values[~np.isnan(flat_values)]
     
         # Calculate percentile thresholds (low = good)
@@ -313,7 +313,7 @@ def main():
     
         def numeric_grade(value):
             if np.isnan(value):
-                return -1  # NA
+                return np.nan  # NA
             elif value <= p[0]:
                 return 0  # A+
             elif value <= p[1]:
@@ -329,13 +329,13 @@ def main():
     
         grades = xr.apply_ufunc(
             np.vectorize(numeric_grade),
-            index_data,
+            index_da,
             dask="parallelized",
             output_dtypes=[int]
         )
     
         grades.attrs["legend"] = {
-            -1: "NA",
+            'nan': "NA",
              0: "A+",
              1: "A",
              2: "B",
@@ -379,8 +379,11 @@ def main():
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
     # 6e. Save Staragazing DS as a tileset
-    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)), "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2")
-
+    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | skycover_da.attrs)),
+                              "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
+    
+    # 6f. Save Stargazing DS as a GIF
+    
     
 # Let's execute this main function!
 main()
