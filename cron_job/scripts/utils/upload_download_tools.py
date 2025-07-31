@@ -53,7 +53,6 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
     try:
         zarr_path = os.path.join(tmpdir, "data.zarr")
         logger.info("Writing dataset to Zarr...")
-        nws_ds.load()  # force all lazy computations
         nws_ds.to_zarr(zarr_path, mode="w", consolidated=True)
 
         logger.info("Uploading Zarr dataset to Supabase...")
