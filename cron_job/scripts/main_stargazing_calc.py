@@ -331,7 +331,7 @@ def main():
             np.vectorize(numeric_grade),
             index_da,
             dask="parallelized",
-            output_dtypes=[int]
+            keep_attrs='override'
         )
     
         grades.attrs["legend"] = {
@@ -368,9 +368,6 @@ def main():
     stargazing_ds = stargazing_ds.chunk(target_chunks)
     for var in stargazing_ds.data_vars:
         stargazing_ds[var].encoding.clear()
-
-    # Passing on GRIB attribute data as well
-    stargazing_ds.attrs.update((stargazing_ds.attrs | skycover_da.attrs))
 
     gc.collect # garbage collector. deletes data no longer in use
     
