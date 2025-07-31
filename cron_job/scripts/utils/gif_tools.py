@@ -149,6 +149,58 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label):
     log_memory_usage("After uploading Temperature GIF to supabase")
     gc.collect # garbage collector. deletes data no longer in use
         
+def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels, cmap='gnuplot2_r'):
+    images = []
+    for time_step in range(len(stargazing_da.step.values)):
+        stargazing_data = stargazing_da[time_step]
+        lat = stargazing_data.latitude
+        lon = stargazing_data.longitude
+        fig = plt.figure(figsize=(12,6))
+        ax = fig.add_subplot(1,1,1, projection=ccrs.PlateCarree())
+        plt.pcolormesh(lon, lat, stargazing_data, cmap=cmap,
+                       transform=ccrs.PlateCarree())
+        plt.clim(-1,5)
+        gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False, linewidth=0.5) 
+        ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) 
+        ax.add_feature(cfeature.BORDERS, linestyle=':') 
+        ax.coastlines(resolution='110m', zorder=3) 
+        gl.top_labels=False
+        cbar = plt.colorbar(ax=ax, orientation='vertical', pad=0.1,
+                     label=f'{cbar_label}', extend='neither')
+        cbar.set_label(label=cbar_label, size=16, weight='bold')
+        cbar.ax.tick_params(labelsize=15)
+        cbar.ax.set_yticks(np.linspace(-1,5,7))
+        cbar.ax.set_yticklabels(cbar_tick_labels)
+        local_dt = pd.to_datetime(stargazing_data.valid_time.values).tz_localize(mountain_tz)
+        ax.set_title(f"Stargazing Grades on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
+        img = fig2img(fig)
+        images.append(img)
+        plt.close(fig)
+        log_memory_usage(f"After plotting frame {time_step+1}/{len(stargazing_da.step.values)}")
+        gc.collect()
+
+    gif_buffer = io.BytesIO()
+    images[0].save(gif_buffer, format='GIF', save_all=True,
+                   append_images=images[1:], duration=350, loop=0)
+    gif_buffer.seek(0)
+
+    api_key = os.environ['SUPABASE_KEY']
+    if not api_key:
+        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
+                            {"Authorization": f"Bearer {api_key}"}, is_async=False)
+
+    storage_path_prefix = "plots/Stargazing_Dataset_Latest.gif"
+    storage.from_("maps").upload(
+        storage_path_prefix,
+        gif_buffer.read(),
+        {"content-type": "image/gif", "x-upsert": "true"}
+    )
+    gif_buffer.close()
+    del gif_buffer
+    log_memory_usage("After uploading Stargazing Letter Grades GIF to Supabase")
+    gc.collect()
+
 def create_moon_gif(moon_ds, cmap, cbar_label, data_title):
     ticks = np.arange(0,101,10)
     images = []
