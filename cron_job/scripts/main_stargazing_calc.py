@@ -313,7 +313,7 @@ def main():
     
         def numeric_grade(value):
             if np.isnan(value):
-                return np.nan  # NA
+                return -1  # NA
             elif value <= p[0]:
                 return 0  # A+
             elif value <= p[1]:
@@ -331,11 +331,12 @@ def main():
             np.vectorize(numeric_grade),
             index_da,
             dask="parallelized",
-            keep_attrs='override'
+            keep_attrs='override',
+            output_dtypes=[np.int64]
         )
     
         grades.attrs["legend"] = {
-            'nan': "NA",
+            -1: "NA",
              0: "A+",
              1: "A",
              2: "B",
