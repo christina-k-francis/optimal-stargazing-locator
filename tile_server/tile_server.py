@@ -12,7 +12,7 @@ Created on Sat June 28 18:24:00 2025
     be displayed as map layers.
 """
 ###
-import os
+import os, io
 import logging
 import threading
 import time
@@ -60,6 +60,15 @@ LAYER_PATHS = {
     "LightPollution_Tiles": "light-pollution-data/zenith_ConUSA_colored_tiles",
 }
 
+# Legend file mapping for static access
+LEGEND_PATHS = {
+    "Temp": "plots/Temp_Legend.png",
+    "Stargazing": "plots/Stargazing_Legend.png",
+    "SkyCover": "plots/SkyCover_Legend.png",
+    "PrecipProb": "plots/PrecipProb_Legend.png",
+    "LightPollution": "plots/LightPollution_Legend.png",
+}
+
 # blank tile configuration
 blank_tile_url = "https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/maps/data-layer-tiles/blank_tile_256x256.png"
 
@@ -94,7 +103,7 @@ async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y
     try:
         tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
         if tile_data:
-            logger.info(f"Tile found in supabase.")
+            logger.info("Tile found in supabase.")
             return Response(status_code=200)
     except Exception as e:
         logger.warning(f"Supabase HEAD lookup failed: {e}")
@@ -176,8 +185,29 @@ def serve_blank_tile(cache_path: Path):
     except Exception as e:
         logger.error(f"Failed to fetch blank tile: {e}")
         return Response(status_code=500, content="Tile and fallback missing")
+    
+# --- Legend Serving Endpoint -------------------------------------------------
+@app.get("/legends/{layer}.png")
+async def get_legend(layer: str):
+    """
+    Serves the legend image associated with a given layer from Supabase.
+    """
+    if layer not in LEGEND_PATHS:
+        logger.warning(f"Legend not found for layer: {layer}")
+        return Response(status_code=404, content="Legend not found")
 
-# --- Health Check ----------------------------------------------------------------
+    supabase_path = LEGEND_PATHS[layer]
+    try:
+        legend_data = storage.from_(BUCKET_NAME).download(supabase_path)
+        return StreamingResponse(io.BytesIO(legend_data), media_type="image/png", headers={
+            "Cache-Control": "public, max-age=86400"  # Cache for 1 day
+        })
+    except Exception as e:
+        logger.error(f"Error fetching legend {supabase_path}: {e}")
+        return Response(status_code=500, content="Error fetching legend")
+
+
+# --- Health Check ------------------------------------------------------------
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
