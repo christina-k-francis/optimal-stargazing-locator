@@ -18,7 +18,7 @@ import threading
 import time
 from pathlib import Path
 import httpx
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, FileResponse
 from fastapi.responses import StreamingResponse
 from storage3 import create_client
 
@@ -187,24 +187,19 @@ def serve_blank_tile(cache_path: Path):
         return Response(status_code=500, content="Tile and fallback missing")
     
 # --- Legend Serving Endpoint -------------------------------------------------
-@app.get("/legends/{layer}.png")
-async def get_legend(layer: str):
-    """
-    Serves the legend image associated with a given layer from Supabase.
-    """
-    if layer not in LEGEND_PATHS:
-        logger.warning(f"Legend not found for layer: {layer}")
-        return Response(status_code=404, content="Legend not found")
+@app.get("/legends/{filename}")
+async def get_legend(filename: str):
+    filepath = f"./legends/{filename}"
+    if os.path.exists(filepath):
+        return FileResponse(filepath, media_type="image/png")
+    return {"error": "File not found"}, 404
 
-    supabase_path = LEGEND_PATHS[layer]
-    try:
-        legend_data = storage.from_(BUCKET_NAME).download(supabase_path)
-        return StreamingResponse(io.BytesIO(legend_data), media_type="image/png", headers={
-            "Cache-Control": "public, max-age=86400"  # Cache for 1 day
-        })
-    except Exception as e:
-        logger.error(f"Error fetching legend {supabase_path}: {e}")
-        return Response(status_code=500, content="Error fetching legend")
+@app.head("/legends/{filename}")
+async def head_legend(filename: str):
+    filepath = f"./legends/{filename}"
+    if os.path.exists(filepath):
+        return {}, 200
+    return {}, 404
 
 
 # --- Health Check ------------------------------------------------------------
