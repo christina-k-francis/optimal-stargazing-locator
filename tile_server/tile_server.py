@@ -62,11 +62,16 @@ LAYER_PATHS = {
 
 # Legend file mapping for static access
 LEGEND_PATHS = {
-        "Temp.png": "plots/Temp_Legend.png",
-        "Stargazing.png": "plots/Stargazing_Legend.png",
-        "SkyCover.png": "plots/SkyCover_Legend.png",
-        "PrecipProb.png": "plots/PrecipProb_Legend.png",
-        "LightPollution.png": "plots/LightPollution_Legend.png",
+        "Temp_Dark.png": "plots/Temp_Legend_Dark.png",
+        "Temp_Light.png": "plots/Temp_Legend_Light.png",
+        "Stargazing_Dark.png": "plots/Stargazing_Legend_Dark.png",
+        "Stargazing_Light.png": "plots/Stargazing_Legend_Light.png",
+        "SkyCover_Dark.png": "plots/SkyCover_Legend_Dark.png",
+        "SkyCover_Light.png": "plots/SkyCover_Legend_Light.png",
+        "PrecipProb_Dark.png": "plots/PrecipProb_Legend_Dark.png",
+        "PrecipProb_Light.png": "plots/PrecipProb_Legend_Light.png",
+        "LightPollution_Dark.png": "plots/LightPollution_Legend_Dark.png",
+        "LightPollution_Light.png": "plots/LightPollution_Legend_Light.png"
     }
 
 # blank tile configuration
