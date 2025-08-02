@@ -382,7 +382,7 @@ def main():
                               "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
     
     # 6f. Save Stargazing DS as a GIF
-    logger.ingo('Creating GIF of latest Stargazing Conditions Grades forecast')
+    logger.info('Creating GIF of latest Stargazing Conditions Grades forecast')
     create_stargazing_gif(stargazing_ds['grade_num'],
                           'Stargazing Conditions Grades',
                           ['N/A','A+','A','B','C','D','F'])
