@@ -62,12 +62,12 @@ LAYER_PATHS = {
 
 # Legend file mapping for static access
 LEGEND_PATHS = {
-    "Temp": "plots/Temp_Legend.png",
-    "Stargazing": "plots/Stargazing_Legend.png",
-    "SkyCover": "plots/SkyCover_Legend.png",
-    "PrecipProb": "plots/PrecipProb_Legend.png",
-    "LightPollution": "plots/LightPollution_Legend.png",
-}
+        "Temp.png": "plots/Temp_Legend.png",
+        "Stargazing.png": "plots/Stargazing_Legend.png",
+        "SkyCover.png": "plots/SkyCover_Legend.png",
+        "PrecipProb.png": "plots/PrecipProb_Legend.png",
+        "LightPollution.png": "plots/LightPollution_Legend.png",
+    }
 
 # blank tile configuration
 blank_tile_url = "https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/maps/data-layer-tiles/blank_tile_256x256.png"
@@ -189,19 +189,25 @@ def serve_blank_tile(cache_path: Path):
 # --- Legend Serving Endpoint -------------------------------------------------
 @app.get("/legends/{filename}")
 async def get_legend(filename: str):
-    filepath = f"./legends/{filename}"
-    if os.path.exists(filepath):
-        return FileResponse(filepath, media_type="image/png")
-    return Response(content='{"error": "File not found"}', 
-                    status_code=404, media_type="application/json")
+    if filename not in LEGEND_PATHS:
+        return Response(content='{"error": "Invalid legend name"}', status_code=404, media_type="application/json")
+    try:
+        data = storage.from_("maps").download(LEGEND_PATHS[filename])
+        return Response(content=data, media_type="image/png")
+    except Exception as e:
+        logger.error(f"Failed to fetch {filename} from Supabase: {e}")
+        return Response(content='{"error": "File not found"}', status_code=404, media_type="application/json")
+
 
 @app.head("/legends/{filename}")
 async def head_legend(filename: str):
-    filepath = f"./legends/{filename}"
-    if os.path.exists(filepath):
+    if filename not in LEGEND_PATHS:
+        return Response(status_code=404, media_type="application/json")
+    try:
+        _ = storage.from_("maps").download(LEGEND_PATHS[filename])
         return Response(status_code=200, media_type="image/png")
-    return Response(status_code=404, media_type="application/json")
-
+    except:
+        return Response(status_code=404, media_type="application/json")
 
 # --- Health Check ------------------------------------------------------------
 @app.get("/health")
