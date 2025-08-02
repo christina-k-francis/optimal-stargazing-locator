@@ -192,14 +192,15 @@ async def get_legend(filename: str):
     filepath = f"./legends/{filename}"
     if os.path.exists(filepath):
         return FileResponse(filepath, media_type="image/png")
-    return {"error": "File not found"}, 404
+    return Response(content='{"error": "File not found"}', 
+                    status_code=404, media_type="application/json")
 
 @app.head("/legends/{filename}")
 async def head_legend(filename: str):
     filepath = f"./legends/{filename}"
     if os.path.exists(filepath):
-        return {}, 200
-    return {}, 404
+        return Response(status_code=200, media_type="image/png")
+    return Response(status_code=404, media_type="application/json")
 
 
 # --- Health Check ------------------------------------------------------------
