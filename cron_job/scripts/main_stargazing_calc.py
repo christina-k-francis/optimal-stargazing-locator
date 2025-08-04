@@ -282,8 +282,8 @@ def main():
     # variable weights
     w_precip = 0.5
     w_cloud = 0.5
-    w_LP = 0.75
-    w_moon = 0.3
+    w_LP = 0.9
+    w_moon = 0.2
     
     log_memory_usage("Before calculating the Stargazing Index")
     # 6a. Evaluating spatiotemporal stargazing conditions!
