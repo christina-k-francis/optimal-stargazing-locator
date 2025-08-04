@@ -280,8 +280,8 @@ def main():
     moonlight_da = moonlight_da.chunk(target_chunks)
     
     # variable weights
-    w_precip = 0.5
-    w_cloud = 0.5
+    w_precip = 0.4
+    w_cloud = 0.6
     w_LP = 0.9
     w_moon = 0.2
     
