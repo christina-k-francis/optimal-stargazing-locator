@@ -98,6 +98,9 @@ Contributions welcome! Please:
 
 ## Future Plans ✨
 
+* Implementation for documenting user feedback
+* Provide viewable GIF dataset forecasts
+* Feautre that extracts lat,lon coordinates of selected map location
 * Expand to global coverage
 * Incorporate warning for proximity to urban light dome 
 * Add real-time wind direction and wind speed animations
