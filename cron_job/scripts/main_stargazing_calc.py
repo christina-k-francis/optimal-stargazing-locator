@@ -265,7 +265,7 @@ def main():
 
     gc.collect # garbage collector. deletes data no longer in use
     
-    # 6. Calculate the Stargazing Index as the Sum of Weighted Values
+    # 6. Calculate the Stargazing Index/Grades Based on Absolute Conditions
     logger.info("Evaluating Stargazing Conditions...")
     # Ensuring that datasets are aligned chunk-wise
     target_chunks = {
@@ -277,99 +277,129 @@ def main():
     skycover_da_norm = skycover_da_norm.chunk(target_chunks)
     precip_da_norm = precip_da_norm.chunk(target_chunks)
     lightpollution_3d = lightpollution_3d.chunk(target_chunks)
-    moonlight_da = moonlight_da.chunk(target_chunks)
+    moonlight_da = moonlight_da.chunk(target_chunks
     
     # variable weights
     w_precip = 0.4
     w_cloud = 0.75
     w_LP = 1
     w_moon = 0.2
-    
+    weight_sum = w_precip + w_cloud + w_LP + w_moon
+
     log_memory_usage("Before calculating the Stargazing Index")
-    # 6a. Evaluating spatiotemporal stargazing conditions!
-    stargazing_index = (
-        w_cloud * skycover_da_norm +
-        w_precip * precip_da_norm +
-        w_LP * lightpollution_3d +
-        w_moon * moonlight_da
+
+    # 6a. Evaluate variable conditions individually, assign letter grades
+    grade_legend = {
+        -1: "NA",
+         0: "A+",
+         1: "A",
+         2: "B",
+         3: "C",
+         4: "D",
+         5: "F"
+    }
+
+    def grade_precip(p):
+        if np.isnan(p): return -1
+        if p > 0.5: return 5
+        elif p > 0.2: return 3
+        elif p > 0.05: return 2
+        else: return 0
+
+    def grade_cloud(c):
+        if np.isnan(c): return -1
+        if c >= 1.0: return 5
+        elif c > 0.75: return 5
+        elif c > 0.5: return 4
+        elif c > 0.2: return 2
+        else: return 0
+
+    def grade_lightpollution(lp):
+        if np.isnan(lp): return -1
+        if lp >= 0.85: return 0
+        elif lp >= 0.70: return 1
+        elif lp >= 0.55: return 2
+        elif lp >= 0.40: return 3
+        elif lp >= 0.25: return 4
+        else: return 5
+
+    def grade_moon(m):
+        if np.isnan(m): return -1
+        if m > 0.75: return 4
+        elif m > 0.5: return 3
+        elif m > 0.25: return 2
+        else: return 0
+
+    # Applying the grades to each variable
+    grades_precip = xr.apply_ufunc(
+        np.vectorize(grade_precip), precip_da_norm,
+        dask="parallelized", output_dtypes=[np.int64]
     )
-    
-    # let's make valid_time a single chunk of its own
-    stargazing_index['valid_time'] = stargazing_index['valid_time'].chunk({})
-    if 'chunks' in stargazing_index['valid_time'].encoding:
-        del stargazing_index['valid_time'].encoding['chunks']
-    log_memory_usage("After calculating the Stargazing Index")
-        
-    logger.info('Converting to Letter Grades...')    
-    # 6b. Convert Stargazing Indices to Letter Grades
-    # Letter grades are stored numerically to ensure frontend compatibility
-    def index_to_grade_calc(index_da):
-        # Flatten and drop NaNs
-        flat_values = index_da.values.flatten()
-        valid_values = flat_values[~np.isnan(flat_values)]
-    
-        # Calculate percentile thresholds (low = good)
-        p = np.percentile(valid_values, [5, 10, 20, 35, 50])
-    
-        def numeric_grade(value):
-            if np.isnan(value):
-                return -1  # NA
-            elif value <= p[0]:
-                return 0  # A+
-            elif value <= p[1]:
-                return 1  # A
-            elif value <= p[2]:
-                return 2  # B
-            elif value <= p[3]:
-                return 3  # C
-            elif value <= p[4]:
-                return 4  # D
-            else:
-                return 5  # F
-    
-        grades = xr.apply_ufunc(
-            np.vectorize(numeric_grade),
-            index_da,
-            dask="parallelized",
-            keep_attrs='override',
-            output_dtypes=[np.int64]
-        )
-    
-        grades.attrs["legend"] = {
-            -1: "NA",
-             0: "A+",
-             1: "A",
-             2: "B",
-             3: "C",
-             4: "D",
-             5: "F"
-        }
-    
-        grades.attrs["thresholds"] = {
-            "A+": round(p[0], 3),
-            "A": round(p[1], 3),
-            "B": round(p[2], 3),
-            "C": round(p[3], 3),
-            "D": round(p[4], 3),
-            "F": f">{round(p[4], 3)}"
-        }
-    
-        return grades
-    
-    # Performing the conversion!
-    stargazing_grades = index_to_grade_calc(stargazing_index)
-    log_memory_usage("After converting indices to letter grades")
-    
-    # 6c. Merge stargazing indices and letter grades into single dataset
-    stargazing_ds = xr.merge([stargazing_index.rename("index"),
-                              stargazing_grades.rename("grade_num")],
-                             combine_attrs='no_conflicts')
-    
-    # Remedying likely chunk mismatching
+    grades_cloud = xr.apply_ufunc(
+        np.vectorize(grade_cloud), skycover_da_norm,
+        dask="parallelized", output_dtypes=[np.int64]
+    )
+    grades_lp = xr.apply_ufunc(
+        np.vectorize(grade_lightpollution), lightpollution_3d,
+        dask="parallelized", output_dtypes=[np.int64]
+    )
+    grades_moon = xr.apply_ufunc(
+        np.vectorize(grade_moon), moonlight_da,
+        dask="parallelized", output_dtypes=[np.int64]
+    )
+
+    # 6b. Combine the variable grades by their weights
+    def combine_grades(p, c, lp, m):
+        vals = []
+        weights = []
+        # add variable value only if it's valid
+        if p != -1:
+            vals.append(p); weights.append(w_precip)
+        if c != -1:
+            vals.append(c); weights.append(w_cloud)
+        if lp != -1:
+            vals.append(lp); weights.append(w_LP)
+        if m != -1:
+            vals.append(m); weights.append(w_moon)
+
+        if len(vals) == 0:
+            return -1
+
+        # Special override: precip=F or clouds=F dominate
+        if (p == 5 and w_precip > 0) or (c == 5 and w_cloud > 0):
+            return 5
+
+        # Weighted average of grades
+        weighted_avg = np.average(vals, weights=weights)
+        return int(np.rint(weighted_avg))
+
+    # 6c. Evaluating Spatiotemporal Stargazing Conditions!
+    stargazing_grades = xr.apply_ufunc(
+        np.vectorize(combine_grades),
+        grades_precip, grades_cloud, grades_lp, grades_moon,
+        dask="parallelized", output_dtypes=[np.int64]
+    )
+
+    # Attach metadata
+    stargazing_grades.attrs["legend"] = grade_legend
+    stargazing_grades.attrs["description"] = "Weighted absolute grading of stargazing conditions"
+
+    # Merge into final dataset
+    stargazing_ds = xr.merge([
+        stargazing_index.rename("index"),
+        stargazing_grades.rename("grade_num"),
+        grades_precip.rename("grade_precip"),
+        grades_cloud.rename("grade_cloud"),
+        grades_lp.rename("grade_lightpollution"),
+        grades_moon.rename("grade_moon")
+    ], combine_attrs='no_conflicts')
+
     stargazing_ds = stargazing_ds.chunk(target_chunks)
     for var in stargazing_ds.data_vars:
         stargazing_ds[var].encoding.clear()
 
+    log_memory_usage("After calculating stargazing letter grades")
+    
     gc.collect # garbage collector. deletes data no longer in use
     
     # 6d. Save Stargazing DS as zarr file
