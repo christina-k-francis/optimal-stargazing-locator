@@ -277,7 +277,7 @@ def main():
     skycover_da_norm = skycover_da_norm.chunk(target_chunks)
     precip_da_norm = precip_da_norm.chunk(target_chunks)
     lightpollution_3d = lightpollution_3d.chunk(target_chunks)
-    moonlight_da = moonlight_da.chunk(target_chunks
+    moonlight_da = moonlight_da.chunk(target_chunks)
     
     # variable weights
     w_precip = 0.4
