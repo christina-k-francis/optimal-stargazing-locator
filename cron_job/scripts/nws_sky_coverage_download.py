@@ -37,7 +37,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
-logging.getLogger("supabase").setLevel(logging.WARNING)
 
 def get_sky_coverage():    
     # URLs from NOAA NWS NDFD and grib cloud paths

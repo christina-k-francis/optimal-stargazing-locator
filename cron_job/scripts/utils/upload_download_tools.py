@@ -1,11 +1,13 @@
 """
 Here are functions useful for uploading and downloading multidimensional 
-xarray datasets/zarr files to and from supabase with fail-proof safety nets.
+xarray datasets/zarr files to and from Cloudflare R2 with fail-proof safety nets.
 """
 
 import xarray as xr
 import rioxarray
+import boto3
 import os
+import s3fs
 import time
 import httpx
 import fsspec
@@ -29,25 +31,33 @@ warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
-logging.getLogger("supabase").setLevel(logging.WARNING)
 
-def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
+def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
+                         bucket_name='optimal-stargazing-locator')
     """
-    Saves an xarray Dataset as Zarr and uploads it recursively to Supabase with retries.
-    
+    Saves an xarray Dataset as Zarr and uploads it recursively to Cloudflare R2 with retries.
+
     Parameters:
-    - combined_ds (xr.Dataset): Dataset to upload
-    - storage_path_prefix (str): Supabase key prefix (e.g., processed-data/Temp_Latest.zarr)
-    - bucket_name (str): Supabase storage bucket (default "maps")
+    - nws_ds (xr.Dataset): Dataset to upload
+    - storage_path_prefix (str): R2 key prefix (e.g., processed-data/Temp_Latest.zarr)
+    - bucket_name (str): R2 storage bucket (default "maps")
     """
-    database_url = "https://rndqicxdlisfpxfeoeer.supabase.co"
-    api_key = os.environ.get("SUPABASE_KEY")
-    if not api_key:
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
+    # Cloud Access Variables
+    account_id = os.environ.get("R2_TOKEN")
+    access_key = os.environ.get("R2_ACCESS_KEY")
+    secret_key = os.environ.get("R2_SECRET_KEY")
+    if not account_id or not access_key or not secret_key:
+        raise EnvironmentError("R2 credentials (R2_TOKEN, R2_ACCESS_KEY, R2_SECRET_KEY) must be set.")
 
-    storage = create_client(f"{database_url}/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
+    # Endpoint format: https://<account_id>.r2.cloudflarestorage.com
+    endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+    )
 
     tmpdir = tempfile.mkdtemp()
     try:
@@ -55,12 +65,12 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
         logger.info("Writing dataset to Zarr...")
         nws_ds.to_zarr(zarr_path, mode="w", consolidated=True)
 
-        logger.info("Uploading Zarr dataset to Supabase...")
+        logger.info("Uploading Zarr dataset to Cloudflare R2...")
         for root, _, files in os.walk(zarr_path):
             for file in files:
                 local_file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(local_file_path, zarr_path)
-                supabase_path = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
+                r2_key = f"{storage_path_prefix}/{relative_path.replace(os.sep, '/')}"
 
                 mime_type, _ = mimetypes.guess_type(file)
                 if mime_type is None:
@@ -69,13 +79,11 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
                 for attempt in range(1, MAX_RETRIES + 1):
                     try:
                         with open(local_file_path, "rb") as f:
-                            storage.from_(bucket_name).upload(
-                                supabase_path,
-                                f.read(),
-                                {
-                                    "content-type": mime_type,
-                                    "x-upsert": "true"
-                                }
+                            s3_client.upload_fileobj(
+                                f,
+                                bucket_name,
+                                r2_key,
+                                ExtraArgs={"ContentType": mime_type}
                             )
                         break  # successful upload
                     except Exception as e:
@@ -84,12 +92,13 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str, bucket_name="maps"):
                             time.sleep(DELAY_BETWEEN_RETRIES)
                         else:
                             logger.error(f"Final failure uploading {relative_path}")
-        logger.info("✅ Zarr dataset uploaded to Supabase successfully.")
+        logger.info("✅ Zarr dataset uploaded to Cloudflare R2 successfully.")
     finally:
         try:
             shutil.rmtree(tmpdir, ignore_errors=True)
         except Exception as e:
             logger.warning(f"Tmpdir cleanup failed: {e}")
+
 
 
 def download_grib_with_retries(url, variable_key, max_retries=5, timeout=90):
@@ -137,47 +146,55 @@ def download_grib_with_retries(url, variable_key, max_retries=5, timeout=90):
             logger.info(f"Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
 
-def load_zarr_from_supabase(bucket, path):
+def load_zarr_from_R2(bucket: str, path: str):
     """
-    Downloads the specified zarr file from the provided supabase storage path.
+    Downloads the specified zarr file from the provided Cloudflare R2 bucket.
 
     Parameters:
-    - bucket: supabase storage bucket name in string format
-    - path: path within supabase storage bucket to the desired GeoTIFF in str format
+    - bucket: R2 bucket name in string format
+    - path: path within R2 storage bucket to the desired GeoTIFF in str format
 
     Returns:
-    - xarray.DataArray 
+    - xarray.Dataset 
     """
-    url_base = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}/"
-    fs = fsspec.filesystem("http")
-    ds = xr.open_zarr(fs.get_mapper(url_base), consolidated=True,
-                      decode_timedelta='CFTimedeltaCoder')
-    return ds
+    
+    account_id = os.environ["R2_TOKEN"]
+    access_key = os.environ["R2_ACCESS_KEY"]
+    secret_key = os.environ["R2_SECRET_KEY"]
 
-def load_tiff_from_supabase(bucket: str, path: str):
+    fs = s3fs.S3FileSystem(
+        key=access_key,
+        secret=secret_key,
+        client_kwargs={"endpoint_url": f"https://{account_id}.r2.cloudflarestorage.com"}
+    )
+
+    store = fs.get_mapper(f"{bucket}/{path}")
+    ds = xr.open_zarr(store, consolidated=True, decode_timedelta="CFTimedeltaCoder")
+    return ds
+    
+
+def load_tiff_from_R2(bucket: str, path: str):
     """
-    Downloads the specified GeoTIFF from the provided supabase storage path.
+    Downloads the specified GeoTIFF from Cloudflare R2 bucket using s3fs + rioxarray.
 
     Parameters:
-    - bucket: supabase storage bucket name in string format
-    - path: path within supabase storage bucket to the desired GeoTIFF
+    - bucket: R2 bucket name
+    - path: path within R2 bucket to the desired GeoTIFF
 
     Returns:
     - xarray.DataArray or None
     """
-    file_url = f"https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/{bucket}/{path}"
-    with httpx.Client() as client:
-        r = client.get(file_url)
-        r.raise_for_status()
-    
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
-                tmp.write(r.content)
-                tmp_path = tmp.name  
-                tmp.flush() # ensures data is written to disk
-                
-                da = rioxarray.open_rasterio(tmp_path, masked=True)
-                os.remove(tmp.name) # ensure temp file is deleted
-                return da
-        except:
-            logger.exception("geoTIFF download error")
+
+    account_id = os.environ["R2_TOKEN"]
+    access_key = os.environ["R2_ACCESS_KEY"]
+    secret_key = os.environ["R2_SECRET_KEY"]
+
+    fs = s3fs.S3FileSystem(
+        key=access_key,
+        secret=secret_key,
+        client_kwargs={"endpoint_url": f"https://{account_id}.r2.cloudflarestorage.com"}
+    )
+
+    s3_url = f"s3://{bucket}/{path}"
+    da = rioxarray.open_rasterio(s3_url, masked=True, filesystem=fs)
+    return da

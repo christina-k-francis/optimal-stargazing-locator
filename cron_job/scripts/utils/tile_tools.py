@@ -3,6 +3,7 @@ Here are function(s) useful for tile generation of multidimensional xarray datas
 """
 
 import os
+import boto3
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -37,32 +38,23 @@ warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
-logging.getLogger("supabase").setLevel(logging.WARNING)  
+logging.getLogger("R2").setLevel(logging.WARNING)  
 
-def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="viridis"):
+def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_name="viridis"):
     """
     Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
 
     Parameters:
     - ds (xarray data array): xarray dataset with dimensions [step, y, x]
     - layer_name (str): Label for the tiles (e.g., "cloud_coverage")
-    - supabase_prefix (str): Path prefix inside Supabase bucket
+    - R2_prefix (str): Path prefix inside R2 bucket
     - sleep_secs (int): Delay between tile uploads
     - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
     """
 
     logger.info(f"Generating tiles for {layer_name} with colormap: {colormap_name}")
 
-    api_key = os.environ['SUPABASE_KEY']
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
-
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
-
-    bucket_name = "maps"
+    bucket_name = "optimal-stargazing-locator"
     MAX_RETRIES = 5
     DELAY_BETWEEN_RETRIES = 2
 
@@ -128,36 +120,43 @@ def generate_tiles_from_zarr(ds, layer_name, supabase_prefix, sleep_secs, colorm
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
+            account_id = os.environ["R2_TOKEN"]
+            access_key = os.environ["R2_ACCESS_KEY"]
+            secret_key = os.environ["R2_SECRET_KEY"]
+
+            endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=endpoint_url,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+            )
+
             for root, _, files in os.walk(tile_output_dir):
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
-                    upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    upload_path = f"{R2_prefix}/{timestamp_str}/{rel_path}/{file}"
                     local_path = pathlib.Path(root) / file
 
                     for attempt in range(1, MAX_RETRIES + 1):
                         try:
                             with open(local_path, "rb") as f:
-                                storage.from_(bucket_name).upload(
+                                s3_client.upload_fileobj(
+                                    f,
+                                    bucket_name,
                                     upload_path,
-                                    f.read(),
-                                    {"content-type": "image/png", "x-upsert": "true"}
+                                    ExtraArgs={"ContentType": "image/png"}
                                 )
-                            time.sleep(sleep_secs) # delay btw tile uploads to avoid cloud overload
-                            break # upload successful
-                        except httpx.HTTPStatusError as e:
-                            try:
-                                logger.error(f"Supabase error: {e.response.json()}")
-                            except json.JSONDecodeError:
-                                logger.error(f"Supabase non-JSON response: {e.response.text}")
-                            if attempt < MAX_RETRIES:
-                                logger.warning(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
-                                time.sleep(DELAY_BETWEEN_RETRIES)
+                            time.sleep(sleep_secs)  # delay to avoid hammering R2
+                            break  # upload successful
                         except Exception as e:
-                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}): {e}")
+                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}) for {upload_path}: {e}")
                             if attempt < MAX_RETRIES:
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:
                                 logger.error(f"❌ Final failure uploading {upload_path}")
+
 
             log_memory_usage(f"After tileset {i+1}/{len(ds.step.values)}")
             logger.info(f"✅ Tiles for timestep {timestamp_str} uploaded.")
@@ -202,64 +201,21 @@ def rescale_timedelta_coords(ds, coord_name='time'):
             return coord
     else:
         return coord  # No need to adjustdef rescale_timedelta_coords(ds, coord_name='time'):
-    """
-    Detects if the coordinate values are in nanoseconds and rescales them to
-    larger units avoid overflow.
-    Args:
-        ds (xarray.Dataset or xarray.DataArray): Input data.
-        coord_name (str): Coordinate to check (default='time').
-    Returns:
-        xarray.Dataset or xarray.DataArray: Updated object with rescaled coordinate.
-    """
-    if coord_name not in ds.coords:
-        print(f"Coordinate '{coord_name}' not found.")
-        return ds
-
-    coord = ds.coords[coord_name]
-
-    # Check if the values are excessively large (common for nanosecond overflow)
-    if np.abs(coord.values.astype('datetime64[ns]').astype(np.int64)) > 1e18:
-        one_hour = np.timedelta64(1, 'h')
-        coord.values = np.timedelta64(int(ds['step'].values/one_hour))
-        
-        unit_start = str(coord.values.dtype).find('[')+1
-        unit_end = str(coord.values.dtype).find(']')
-        unit = str(coord.values.dtype)[unit_start:unit_end]
-        
-        if unit == 's':
-            coord.encoding['units'] = "seconds"
-            return coord
-        elif unit == 'm':
-            coord.encoding['units'] = "minutes"
-            return coord
-        elif unit == 'h':
-            coord.encoding['units'] = "hours"
-            return coord
-    else:
-        return coord  # No need to adjust
-
-def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="gist_yarg"):
+    
+def generate_moon_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="gist_yarg"):
     """
     Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
 
     Parameters:
     - ds (xarray data array): moon illumination xarray dataset with dimensions [step, y, x]
     - layer_name (str): Label for the tiles (e.g., "moon illumination")
-    - supabase_prefix (str): Path prefix inside Supabase bucket
+    - R2_prefix (str): Path prefix inside R2 bucket
     - sleep_secs (int): Delay between tile uploads
     - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
     """
 
-    api_key = os.environ['SUPABASE_KEY']
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
 
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
-
-    bucket_name = "maps"
+    bucket_name = "optimal-stargazing-locator"
     MAX_RETRIES = 5
     DELAY_BETWEEN_RETRIES = 2
     
@@ -331,36 +287,43 @@ def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_na
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
+            account_id = os.environ["R2_TOKEN"]
+            access_key = os.environ["R2_ACCESS_KEY"]
+            secret_key = os.environ["R2_SECRET_KEY"]
+
+            endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=endpoint_url,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+            )
+
             for root, _, files in os.walk(tile_output_dir):
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
-                    upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    upload_path = f"{R2_prefix}/{timestamp_str}/{rel_path}/{file}"
                     local_path = pathlib.Path(root) / file
 
                     for attempt in range(1, MAX_RETRIES + 1):
                         try:
                             with open(local_path, "rb") as f:
-                                storage.from_(bucket_name).upload(
+                                s3_client.upload_fileobj(
+                                    f,
+                                    bucket_name,
                                     upload_path,
-                                    f.read(),
-                                    {"content-type": "image/png", "x-upsert": "true"}
+                                    ExtraArgs={"ContentType": "image/png"}
                                 )
-                            time.sleep(sleep_secs) # delay btw tile uploads to avoid cloud overload
-                            break # upload successful
-                        except httpx.HTTPStatusError as e:
-                            try:
-                                logger.error(f"Supabase error: {e.response.json()}")
-                            except json.JSONDecodeError:
-                                logger.error(f"Supabase non-JSON response: {e.response.text}")
-                            if attempt < MAX_RETRIES:
-                                logger.warning(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
-                                time.sleep(DELAY_BETWEEN_RETRIES)
+                            time.sleep(sleep_secs)  # delay to avoid hammering R2
+                            break  # upload successful
                         except Exception as e:
-                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}): {e}")
+                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}) for {upload_path}: {e}")
                             if attempt < MAX_RETRIES:
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:
                                 logger.error(f"❌ Final failure uploading {upload_path}")
+
 
             log_memory_usage(f"After tileset {i+1}/{len(ds.step.values)}")
             logger.info(f"✅ Tiles for timestep {timestamp_str} uploaded.")
@@ -369,28 +332,20 @@ def generate_moon_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_na
 
     gc.collect() # garbage collector
  
-def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, colormap_name="viridis"):
+def generate_stargazing_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="viridis"):
     """
     Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
 
     Parameters:
     - ds (xarray data array): stargazing grade number xarray dataset with dimensions [step, y, x]
     - layer_name (str): Label for the tiles (e.g., "grade number, index, etc.")
-    - supabase_prefix (str): Path prefix inside Supabase bucket
+    - R2_prefix (str): Path prefix inside R2 bucket
     - sleep_secs (int): Delay between tile uploads
     - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
     """
 
-    api_key = os.environ['SUPABASE_KEY']
-    if not api_key:
-        logger.error("Missing SUPABASE_KEY in environment variables.")
-        raise EnvironmentError("SUPABASE_KEY is required but not set.")
 
-    storage = create_client("https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1",
-                            {"Authorization": f"Bearer {api_key}"},
-                            is_async=False)
-
-    bucket_name = "maps"
+    bucket_name = "optimal-stargazing-locator"
     MAX_RETRIES = 5
     DELAY_BETWEEN_RETRIES = 2
 
@@ -467,33 +422,39 @@ def generate_stargazing_tiles(ds, layer_name, supabase_prefix, sleep_secs, color
             ], check=True)
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
+            
+            account_id = os.environ["R2_TOKEN"]
+            access_key = os.environ["R2_ACCESS_KEY"]
+            secret_key = os.environ["R2_SECRET_KEY"]
+
+            endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=endpoint_url,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+            )
 
             for root, _, files in os.walk(tile_output_dir):
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
-                    upload_path = f"{supabase_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    upload_path = f"{R2_prefix}/{timestamp_str}/{rel_path}/{file}"
                     local_path = pathlib.Path(root) / file
 
                     for attempt in range(1, MAX_RETRIES + 1):
                         try:
                             with open(local_path, "rb") as f:
-                                storage.from_(bucket_name).upload(
+                                s3_client.upload_fileobj(
+                                    f,
+                                    bucket_name,
                                     upload_path,
-                                    f.read(),
-                                    {"content-type": "image/png", "x-upsert": "true"}
+                                    ExtraArgs={"ContentType": "image/png"}
                                 )
-                            time.sleep(sleep_secs) # delay btw tile uploads to avoid cloud overload
-                            break # upload successful
-                        except httpx.HTTPStatusError as e:
-                            try:
-                                logger.error(f"Supabase error: {e.response.json()}")
-                            except json.JSONDecodeError:
-                                logger.error(f"Supabase non-JSON response: {e.response.text}")
-                            if attempt < MAX_RETRIES:
-                                logger.warning(f"Upload failed (attempt {attempt}/{MAX_RETRIES}): {e}")
-                                time.sleep(DELAY_BETWEEN_RETRIES)
+                            time.sleep(sleep_secs)  # delay to avoid hammering R2
+                            break  # upload successful
                         except Exception as e:
-                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}): {e}")
+                            logger.error(f"Upload error (attempt {attempt}/{MAX_RETRIES}) for {upload_path}: {e}")
                             if attempt < MAX_RETRIES:
                                 time.sleep(DELAY_BETWEEN_RETRIES)
                             else:

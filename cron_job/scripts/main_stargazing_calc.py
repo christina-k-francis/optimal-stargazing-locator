@@ -24,7 +24,7 @@ import warnings
 from utils.gif_tools import create_stargazing_gif
 from utils.memory_logger import log_memory_usage
 from utils.tile_tools import generate_stargazing_tiles 
-from utils.upload_download_tools import load_zarr_from_supabase,load_tiff_from_supabase,upload_zarr_dataset 
+from utils.upload_download_tools import load_zarr_from_R2, load_tiff_from_R2, upload_zarr_dataset 
 
 
 # Set up logging
@@ -46,7 +46,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
-logging.getLogger("supabase").setLevel(logging.WARNING)  
 
 def main():
     log_memory_usage("At start of main script")
@@ -54,15 +53,15 @@ def main():
     logger.info('Importing meteorological and astronomical data...')   
     
     # 1a. import precipitation probability dataset
-    precip_da = load_zarr_from_supabase("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
+    precip_da = load_zarr_from_R2("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
     precip_da.load()
     log_memory_usage("After importing precip data")
     # 1b. import sky coverage dataset
-    skycover_da = load_zarr_from_supabase("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
+    skycover_da = load_zarr_from_R2("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
     skycover_da.load()
     log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
-    lightpollution_da = load_tiff_from_supabase("maps",
+    lightpollution_da = load_tiff_from_R2("maps",
                         "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
     lightpollution_da.load()
     # define coordinate system, clip to United States, assign lat and lon xr coords

@@ -19,7 +19,7 @@ def main():
 
     log_memory_usage("Start Wind Speed/Dir")
     wind_ds = get_wind_speed_direction()
-    # Not yet using; no plots or tiles needed
+    # Not yet using DS; no plots or tiles needed
     del wind_ds
     gc.collect()
     log_memory_usage('Successful End of Aux. Dataset Processing Script!')

@@ -27,7 +27,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
-logging.getLogger("supabase").setLevel(logging.WARNING)
 
 
 def get_wind_speed_direction():
@@ -89,7 +88,7 @@ def get_wind_speed_direction():
     gc.collect()
     log_memory_usage("After assigning U/V components")
 
-    # --- UPLOAD ZARR TO SUPABASE ---
+    # --- UPLOAD ZARR TO R2 ---
     logger.info("Saving Resultant Wind Dataset to Cloud...")
     upload_zarr_dataset(wind_ds, "processed-data/Wind_Spd_Dir_Latest.zarr")
 
