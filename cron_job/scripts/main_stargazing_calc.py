@@ -288,7 +288,7 @@ def main():
 
     log_memory_usage("Before calculating the Stargazing Index")
 
-    # 6a. Evaluate variable conditions individually, assign letter grades
+    # 6a. Evaluate variable conditions individually by assigning letter grades
     grade_legend = {
         -1: "NA",
          0: "A+",
@@ -386,7 +386,6 @@ def main():
 
     # Merge into final dataset
     stargazing_ds = xr.merge([
-        stargazing_index.rename("index"),
         stargazing_grades.rename("grade_num"),
         grades_precip.rename("grade_precip"),
         grades_cloud.rename("grade_cloud"),
