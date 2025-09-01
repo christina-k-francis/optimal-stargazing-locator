@@ -33,7 +33,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
 
 def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
-                         bucket_name='optimal-stargazing-locator')
+                         bucket_name='optimal-stargazing-locator'):
     """
     Saves an xarray Dataset as Zarr and uploads it recursively to Cloudflare R2 with retries.
 
