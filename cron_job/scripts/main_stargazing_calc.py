@@ -48,20 +48,21 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("fsspec").setLevel(logging.WARNING)
 
 def main():
+    bucket_name = 'optimal-stargazing-locator'
     log_memory_usage("At start of main script")
     # 1. IMPORT RELEVANT DATA
     logger.info('Importing meteorological and astronomical data...')   
     
     # 1a. import precipitation probability dataset
-    precip_da = load_zarr_from_R2("maps", "processed-data/PrecipProb_Latest.zarr")['unknown']
+    precip_da = load_zarr_from_R2(bucket_name, "processed-data/PrecipProb_Latest.zarr")['unknown']
     precip_da.load()
     log_memory_usage("After importing precip data")
     # 1b. import sky coverage dataset
-    skycover_da = load_zarr_from_R2("maps", "processed-data/SkyCover_Latest.zarr")['unknown']
+    skycover_da = load_zarr_from_R2(bucket_name, "processed-data/SkyCover_Latest.zarr")['unknown']
     skycover_da.load()
     log_memory_usage("After importing cloud cover data")
     # 1c. import High-Res Artificial Night Sky Brightness data from David Lorenz 
-    lightpollution_da = load_tiff_from_R2("maps",
+    lightpollution_da = load_tiff_from_R2(bucket_name,
                         "light-pollution-data/zenith_brightness_v22_2024_ConUSA.tif")
     lightpollution_da.load()
     # define coordinate system, clip to United States, assign lat and lon xr coords
