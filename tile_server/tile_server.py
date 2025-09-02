@@ -12,21 +12,23 @@ Created on Sat June 28 18:24:00 2025
     be displayed as map layers.
 """
 ###
-import os, io
+import os
 import logging
 import threading
 import time
 from pathlib import Path
+
+import s3fs
 import httpx
 from fastapi import FastAPI, Response
-from fastapi.responses import StreamingResponse, FileResponse
-from storage3 import create_client
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- Configuration ---------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(title='Stargazing Web App Tile Server')
 
 # CORS setup
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,24 +36,24 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # For testing/dev, allow all origins
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET","HEAD","OPTIONS"],
     allow_headers=["*"],
 )
 
-# Supabase storage configuration
-SUPABASE_URL = "https://rndqicxdlisfpxfeoeer.supabase.co"
-BUCKET_NAME = "maps"
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+# Cloudflare R2 (S3-compatible) Storage Configuration
+account_id = os.environ["R2_ACCOUNT_ID"]
+access_key = os.environ["R2_ACCESS_KEY"]
+secret_key = os.environ["R2_SECRET_KEY"]
 
-if not SUPABASE_KEY:
-    logger.error("Missing SUPABASE_KEY in environment variables.")
-    raise EnvironmentError("SUPABASE_KEY is required but not set.")
+fs = s3fs.S3FileSystem(
+    key=access_key,
+    secret=secret_key,
+    client_kwargs={"endpoint_url": f"https://{account_id}.r2.cloudflarestorage.com"}
+)
 
-storage = create_client(f"{SUPABASE_URL}/storage/v1",
-                        {"Authorization": f"Bearer {SUPABASE_KEY}"},
-                        is_async=False)
+BUCKET = "optimal-stargazing-locator"
 
-# Map layers mapped to supabase folders
+# Mapping for Paths in Bucket
 LAYER_PATHS = {
     "SkyCover_Tiles": "data-layer-tiles/SkyCover_Tiles",
     "PrecipProb_Tiles": "data-layer-tiles/PrecipProb_Tiles",
@@ -60,7 +62,6 @@ LAYER_PATHS = {
     "LightPollution_Tiles": "light-pollution-data/zenith_ConUSA_colored_tiles",
 }
 
-# Legend file mapping for static access
 LEGEND_PATHS = {
         "Temp_Dark.png": "plots/Temp_Legend_Dark.png",
         "Temp_Light.png": "plots/Temp_Legend_Light.png",
@@ -75,55 +76,75 @@ LEGEND_PATHS = {
     }
 
 # blank tile configuration
-blank_tile_url = "https://rndqicxdlisfpxfeoeer.supabase.co/storage/v1/object/public/maps/data-layer-tiles/blank_tile_256x256.png"
+blank_tile_key = "data-layer-tiles/blank_tile_256x256.png"
 
 # Local cache setup
-CACHE_DIR = Path("tile_cache")
-CACHE_DIR.mkdir(exist_ok=True)
+CACHE_DIR = Path("tile_cache"); CACHE_DIR.mkdir(exist_ok=True)
 CACHE_EXPIRY_SECONDS = 12 * 3600  # 12 hours
+
+# Helpful FXs
+def s3key(key: str) -> str:
+    """Return fully-qualified s3fs path 'bucket/key'."""
+    return f"{BUCKET}/{key.lstrip('/')}"
+
+def slippy_y_from_tms(z: int, y: int) -> int:
+    """ Flips y value from TMS to Slippy format"""
+    return (2 ** z) - 1 - y
+
+# --- Blank Tile Fallback ------------------------------------------------------------
+def serve_blank_tile(cache_path: Path):
+    """Fetches and serves the blank transparent tile """
+    # Cache blank tile locally after first use
+    blank_tile_path = CACHE_DIR / "blank_tile.png"
+    if not blank_tile_path.exists():
+            try:
+                fs.get(s3key(blank_tile_key), str(blank_tile_path))
+                logger.info("Cached blank tile locally.")
+            except Exception as e:
+                logger.error(f"Failed to fetch blank tile {blank_tile_key}: {e}")
+                return Response(status_code=500, content="Tile and fallback missing")
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(blank_tile_path.read_bytes())
+    except Exception:
+        pass
+    return StreamingResponse(open(blank_tile_path, "rb"), media_type="image/png")
 
 # --- Tile Serving Endpoint --------------------------------------------------------------------
 # Route with timestamp
 @app.head("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
 async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y: int):
-    """HEAD request: check tile existence in cache and/or cloud, with y-flip for Slippy Map."""
-    slippy_y = (2 ** z) - 1 - y
-    logger.info(f"HEAD request → layer={layer}, timestamp={timestamp}, z={z}, x={x}, y={y} (slippy_y={slippy_y})")
-    
+    """HEAD request: check tile existence in cache and/or cloud."""
     if layer not in LAYER_PATHS:
         logger.warning(f"Invalid layer: {layer}")
         return Response(status_code=404, content="Layer not found")
 
+    slippy_y = slippy_y_from_tms(z,y)
     local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
     if local_path.exists():
         logger.info(f"Tile found locally at {local_path}")
         return Response(status_code=200)
-
-    if layer == "LightPollution_Tiles" and timestamp == "static":
-        supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
-    else:
-        supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
-
-    logger.info(f"Checking supabase path: {supabase_path}")
+    
+    key = (
+        f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
+        if layer == "LightPollution_Tiles" and timestamp == "static"
+        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
+    )
     try:
-        tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
-        if tile_data:
-            logger.info("Tile found in supabase.")
-            return Response(status_code=200)
+        exists = fs.exists(s3key(key))
+        return Response(status_code=200 if exists else 404)
     except Exception as e:
-        logger.warning(f"Supabase HEAD lookup failed: {e}")
-        return Response(status_code=404, content="Tile not found")
+        logger.warning(f"HEAD failed for {key}: {e}")
+        return Response(status_code=404)
     
 @app.get("/tiles/{layer}/{timestamp}/{z}/{x}/{y}.png")
 async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y: int):
-    """Serve tile from cache or Supabase, flipping y to match Slippy Map."""
-    # Flip y value from TMS to Slippy format
-    slippy_y = (2 ** z) - 1 - y
-
+    """Serve tile from cache or R2."""
     if layer not in LAYER_PATHS:
         logger.warning(f"Invalid layer requested: {layer}")
         return Response(status_code=404, content="Layer not found")
 
+    slippy_y = slippy_y_from_tms(z,y)
     headers = {
         "Cache-Control": "public, max-age=604800",  # Cache for 7 days
         "Content-Type": "image/png"
@@ -135,33 +156,26 @@ async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y:
     if local_path.exists():
         return StreamingResponse(open(local_path, "rb"), headers=headers)
         
-    if layer == "LightPollution_Tiles" and timestamp == "static":
-        supabase_path = f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
-    else:
-        supabase_path = f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
-
+    key = (
+        f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
+        if layer == "LightPollution_Tiles" and timestamp == "static"
+        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
+    )
     try:
-        tile_data = storage.from_(BUCKET_NAME).download(supabase_path)
-        if tile_data:
-            with open(local_path, "wb") as f:
-                f.write(tile_data)
-            return StreamingResponse(open(local_path, "rb"), headers=headers)
+        fs.get(s3key(key), str(local_path))  # download to cache
+        return StreamingResponse(open(local_path, "rb"), headers=headers)
     except Exception as e:
-        logger.warning(f"Tile missing/error ({supabase_path}): {e}")
-
-    # Serve blank tile in place of missing data (also cache it locally)
-    return serve_blank_tile(local_path)
+        logger.warning(f"Tile miss {key}: {e}")
+        return await serve_blank_tile(local_path)
     
-# Route without timestamp (e.g. static layers)
+# Static Layer Shortcuts!
 @app.head("/tiles/{layer}/{z}/{x}/{y}.png")
 async def head_tile_static(layer: str, z: int, x: int, y: int):
-    timestamp = "static"
-    return await head_tile_with_timestamp(layer, timestamp, z, x, y)
+    return await head_tile_with_timestamp(layer, "static", z, x, y)
 
 @app.get("/tiles/{layer}/{z}/{x}/{y}.png")
 async def get_tile_static(layer: str, z: int, x: int, y: int):
-    timestamp = "static"
-    return await get_tile_with_timestamp(layer, timestamp, z, x, y)
+    return await get_tile_with_timestamp(layer, "static", z, x, y)
 
 # Fallback Debugging Route
 @app.head("/tiles/{path:path}")
@@ -169,50 +183,51 @@ async def fallback_debug(path: str):
     logger.warning(f"Unmatched HEAD request for tile: {path}")
     return Response(status_code=404, content="Unmatched HEAD request")
 
-# Funcion for serving missing/blank tiles
-def serve_blank_tile(cache_path: Path):
-    """Fetches and serves the blank transparent tile """
-    try:
-        # Cache blank tile locally after first use
-        blank_tile_path = CACHE_DIR / "blank_tile.png"
-        if not blank_tile_path.exists():
-            with httpx.stream("GET", blank_tile_url) as r:
-                r.raise_for_status()
-                with open(blank_tile_path, "wb") as f:
-                    for chunk in r.iter_bytes():
-                        f.write(chunk)
-            logger.info("Blank tile downloaded and cached locally.")
-
-        # Copy blank tile to requested cache path
-        cache_path.write_bytes(blank_tile_path.read_bytes())
-
-        return StreamingResponse(open(blank_tile_path, "rb"), media_type="image/png")        
-    except Exception as e:
-        logger.error(f"Failed to fetch blank tile: {e}")
-        return Response(status_code=500, content="Tile and fallback missing")
-    
-# --- Legend Serving Endpoint -------------------------------------------------
+# --- Legend and Plots (GIFs) Serving Endpoint -------------------------------------------------
+# legends
 @app.get("/legends/{filename}")
 async def get_legend(filename: str):
-    if filename not in LEGEND_PATHS:
-        return Response(content='{"error": "Invalid legend name"}', status_code=404, media_type="application/json")
+    key = LEGEND_PATHS.get(filename)
+    if not key:
+        return Response(status_code=404, media_type="application/json", content='{"error":"Invalid legend"}')
     try:
-        data = storage.from_("maps").download(LEGEND_PATHS[filename])
-        return Response(content=data, media_type="image/png")
+        with fs.open(s3key(key), "rb") as f:
+            data = f.read()
+        return Response(content=data, media_type="image/png", headers={"Cache-Control": "public, max-age=604800"})
     except Exception as e:
-        logger.error(f"Failed to fetch {filename} from Supabase: {e}")
-        return Response(content='{"error": "File not found"}', status_code=404, media_type="application/json")
-
+        logger.error(f"Legend fetch error {key}: {e}")
+        return Response(status_code=404, media_type="application/json", content='{"error":"File not found"}')
 
 @app.head("/legends/{filename}")
 async def head_legend(filename: str):
-    if filename not in LEGEND_PATHS:
-        return Response(status_code=404, media_type="application/json")
+    key = LEGEND_PATHS.get(filename)
+    if not key:
+        return Response(status_code=404)
     try:
-        _ = storage.from_("maps").download(LEGEND_PATHS[filename])
-        return Response(status_code=200, media_type="image/png")
-    except:
-        return Response(status_code=404, media_type="application/json")
+        return Response(status_code=200) if fs.exists(s3key(key)) else Response(status_code=404)
+    except Exception:
+        return Response(status_code=404)
+# GIF plots   
+@app.get("/plots/{filename}")
+async def get_plot_gif(filename: str):
+    key = f"plots/{filename}"
+    try:
+        with fs.open(s3key(key), "rb") as f:
+            data = f.read()
+        mt = "image/gif" if filename.lower().endswith(".gif") else "image/png"
+        return Response(content=data, media_type=mt, headers={"Cache-Control": "public, max-age=1800"})
+    except Exception as e:
+        logger.error(f"Plot fetch error {key}: {e}")
+        return Response(status_code=404, media_type="application/json", content='{"error":"File not found"}')
+
+@app.head("/plots/{filename}")
+async def head_plot_gif(filename: str):
+    key = f"plots/{filename}"
+    try:
+        return Response(status_code=200) if fs.exists(s3key(key)) else Response(status_code=404)
+    except Exception:
+        return Response(status_code=404)
+
 
 # --- Health Check ------------------------------------------------------------
 @app.get("/health")
@@ -227,16 +242,13 @@ def periodic_cache_cleanup():
         deleted = 0
 
         for tile in CACHE_DIR.rglob("*.png"):
-            if tile.is_file():
-                age = now - tile.stat().st_mtime
-                if age > CACHE_EXPIRY_SECONDS:
-                    try:
-                        tile.unlink()
-                        deleted += 1
-                    except Exception as e:
-                        logger.error(f"Failed to delete {tile}: {e}")
-
-        logger.info(f"Cache cleanup complete. Deleted {deleted} expired tiles.")
+            try:
+                if now - tile.stat().st_mtime > CACHE_EXPIRY_SECONDS:
+                    tile.unlink()
+                    deleted += 1
+            except Exception as e:
+                logger.error(f"Failed to delete {tile}: {e}")
+        logger.info(f"Cache cleanup complete. Deleted {deleted} tiles.")
         time.sleep(3600)  # Run hourly
 
 
