@@ -55,6 +55,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title,
         local_dt = pd.to_datetime(plotting_data.valid_time.values).tz_localize(mountain_tz)
         ax.set_title(f"{data_title} on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
         
+        # create gif snapshot
         img = fig2img(fig)
         images.append(img)
         plt.close(fig)
@@ -174,7 +175,7 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label,
 
     storage_path = f"plots/Temp_Latest.gif"
     s3_client.upload_fileobj(
-        gif_buffer.read(),
+        gif_buffer,
         bucket_name,
         storage_path,
         ExtraArgs={"ContentType": "image/gif"}
