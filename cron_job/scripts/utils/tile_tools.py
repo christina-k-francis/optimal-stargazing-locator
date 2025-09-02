@@ -137,6 +137,9 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
                     upload_path = f"{R2_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    # resolving common path error w/ .xml and .html files
+                    if '/./' in upload_path:
+                        upload_path = upload_path.replace('/./', "/")
                     local_path = pathlib.Path(root) / file
 
                     for attempt in range(1, MAX_RETRIES + 1):
@@ -304,6 +307,9 @@ def generate_moon_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="gi
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
                     upload_path = f"{R2_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    # resolving common path error w/ .xml and .html files
+                    if '/./' in upload_path:
+                        upload_path = upload_path.replace('/./', "/")
                     local_path = pathlib.Path(root) / file
 
                     for attempt in range(1, MAX_RETRIES + 1):
@@ -440,6 +446,9 @@ def generate_stargazing_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_na
                 for file in files:
                     rel_path = pathlib.Path(root).relative_to(tile_output_dir)
                     upload_path = f"{R2_prefix}/{timestamp_str}/{rel_path}/{file}"
+                    # resolving common path error w/ .xml and .html files
+                    if '/./' in upload_path:
+                        upload_path = upload_path.replace('/./', "/")
                     local_path = pathlib.Path(root) / file
 
                     for attempt in range(1, MAX_RETRIES + 1):
