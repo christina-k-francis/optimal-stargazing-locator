@@ -43,11 +43,11 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
     - bucket_name (str): R2 storage bucket (default "maps")
     """
     # Cloud Access Variables
-    account_id = os.environ.get("R2_TOKEN")
+    account_id = os.environ.get("R2_ACCOUNT_ID")
     access_key = os.environ.get("R2_ACCESS_KEY")
     secret_key = os.environ.get("R2_SECRET_KEY")
     if not account_id or not access_key or not secret_key:
-        raise EnvironmentError("R2 credentials (R2_TOKEN, R2_ACCESS_KEY, R2_SECRET_KEY) must be set.")
+        raise EnvironmentError("R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY) must be set.")
 
     # Endpoint format: https://<account_id>.r2.cloudflarestorage.com
     endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
@@ -158,7 +158,7 @@ def load_zarr_from_R2(bucket: str, path: str):
     - xarray.Dataset 
     """
     
-    account_id = os.environ["R2_TOKEN"]
+    account_id = os.environ["R2_ACCOUNT_ID"]
     access_key = os.environ["R2_ACCESS_KEY"]
     secret_key = os.environ["R2_SECRET_KEY"]
 
@@ -185,7 +185,7 @@ def load_tiff_from_R2(bucket: str, path: str):
     - xarray.DataArray or None
     """
 
-    account_id = os.environ["R2_TOKEN"]
+    account_id = os.environ["R2_ACCOUNT_ID"]
     access_key = os.environ["R2_ACCESS_KEY"]
     secret_key = os.environ["R2_SECRET_KEY"]
 

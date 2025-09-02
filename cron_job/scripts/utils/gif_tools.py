@@ -72,7 +72,7 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title,
     gif_buffer.seek(0)
 
     # Upload GIF to R2
-    account_id = os.environ["R2_TOKEN"]
+    account_id = os.environ["R2_ACCOUNT_ID"]
     access_key = os.environ["R2_ACCESS_KEY"]
     secret_key = os.environ["R2_SECRET_KEY"]
 
@@ -160,7 +160,7 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label,
     gif_buffer.seek(0)
     
     # Upload GIF to R2
-    account_id = os.environ["R2_TOKEN"]
+    account_id = os.environ["R2_ACCOUNT_ID"]
     access_key = os.environ["R2_ACCESS_KEY"]
     secret_key = os.environ["R2_SECRET_KEY"]
 
@@ -232,7 +232,7 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
     gif_buffer.seek(0)
 
     # Upload GIF to R2
-    account_id = os.environ["R2_TOKEN"]
+    account_id = os.environ["R2_ACCOUNT_ID"]
     access_key = os.environ["R2_ACCESS_KEY"]
     secret_key = os.environ["R2_SECRET_KEY"]
 
@@ -297,7 +297,7 @@ def create_moon_gif(moon_ds, cmap, cbar_label, data_title,
     gif_buffer.seek(0)
 
     # Upload GIF to R2
-    account_id = os.environ["R2_TOKEN"]
+    account_id = os.environ["R2_ACCOUNT_ID"]
     access_key = os.environ["R2_ACCESS_KEY"]
     secret_key = os.environ["R2_SECRET_KEY"]
 

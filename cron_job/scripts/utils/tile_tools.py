@@ -120,7 +120,7 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
-            account_id = os.environ["R2_TOKEN"]
+            account_id = os.environ["R2_ACCOUNT_ID"]
             access_key = os.environ["R2_ACCESS_KEY"]
             secret_key = os.environ["R2_SECRET_KEY"]
 
@@ -287,7 +287,7 @@ def generate_moon_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="gi
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
-            account_id = os.environ["R2_TOKEN"]
+            account_id = os.environ["R2_ACCOUNT_ID"]
             access_key = os.environ["R2_ACCESS_KEY"]
             secret_key = os.environ["R2_SECRET_KEY"]
 
@@ -423,7 +423,7 @@ def generate_stargazing_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_na
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
             
-            account_id = os.environ["R2_TOKEN"]
+            account_id = os.environ["R2_ACCOUNT_ID"]
             access_key = os.environ["R2_ACCESS_KEY"]
             secret_key = os.environ["R2_SECRET_KEY"]
 
