@@ -195,6 +195,8 @@ def load_tiff_from_R2(bucket: str, path: str):
         client_kwargs={"endpoint_url": f"https://{account_id}.r2.cloudflarestorage.com"}
     )
 
-    s3_url = f"s3://{bucket}/{path}"
-    da = rioxarray.open_rasterio(s3_url, masked=True, filesystem=fs)
+    s3_url = f"{bucket}/{path}"
+
+    with fs.open(s3_url, mode='rb') as file:
+        da = rioxarray.open_rasterio(file, masked=True)
     return da
