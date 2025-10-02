@@ -4,9 +4,9 @@ This is the main orechestration flow for calculating stargazing grades
 
 from prefect import flow, get_run_logger
 from flows import (
-    process_sky_coverage_flow,
-    process_precipitation_flow,
-    main_stargazing_flow,
+    precipitation_forecast_flow,
+    cloud_cover_forecast_flow,
+    main_stargazing_calc_flow,
 )
 
 
@@ -15,17 +15,17 @@ def stargazing_orchestration_flow():
     logger = get_run_logger()
 
     # Run preprocessing flows as parallel tasks
-    sky_future = process_sky_coverage_flow.submit()
-    precip_future = process_precipitation_flow.submit()
+    sky_future = cloud_cover_forecast_flow.submit()
+    precip_future = precipitation_forecast_flow.submit()
 
-    logger.info("Triggered Sky Coverage and Precipitation flows concurrently.")
+    logger.info("Triggered sky coverage and precipitation flows concurrently.")
 
     # Wait for both to finish before continuing
     sky_future.result()
     precip_future.result()
 
-    logger.info("Both preprocessing flows completed successfully.")
+    logger.info("both preprocessing flows completed successfully.")
 
     # Now we'll run the main Stargazing flow
-    main_stargazing_flow()
-    logger.info("Main stargazing flow completed.")
+    main_stargazing_calc_flow()
+    logger.info("main stargazing calc flow completed.")
