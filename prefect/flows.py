@@ -387,6 +387,11 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger.info('preparing meteorological and astronomical data...')
     clouds_da = cloud_cover_forecast_prep_subflow()
     precip_da = precip_forecast_prep_subflow()
+    # ensuring that NWS datasets cover same forecast datetimes
+    precip_da = precip_da[np.isin(precip_da['valid_time'].values,
+                                             clouds_da['valid_time'].values)]
+    clouds_da = clouds_da[np.isin(clouds_da['valid_time'].values,
+                                                 precip_da['valid_time'].values)]
     moon_da = moon_data_prep_subflow(clouds_da["valid_time"].values, 
                                      clouds_da['step'].data,
                                      clouds_da.latitude, 
@@ -397,11 +402,7 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
                                          clouds_da.sizes['step'],
                                          clouds_da['step'],
                                          clouds_da['valid_time'])
-    # ensuring that NWS datasets cover same forecast datetimes
-    precip_da = precip_da[np.isin(precip_da['valid_time'].values,
-                                             clouds_da['valid_time'].values)]
-    clouds_da = clouds_da[np.isin(clouds_da['valid_time'].values,
-                                                 precip_da['valid_time'].values)]
+   
     
     logger.info('evaluating variable effects on stargazing conditions...')
     # ensuring that datasets are aligned chunk-wise
