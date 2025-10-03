@@ -224,14 +224,6 @@ def grade_stargazing(cloud_grades, precip_grades, lp_grades, moon_grades,
     
     return grades
 
-
-@task(log_prints=True, retry_delay_seconds=60, retries=0)
-def main_stargazing_task():
-    # import inside the task to avoid requiring the module at import-time on the deploy server
-    from scripts.main_stargazing_calc import main as stargazing_main
-    stargazing_main()
-    return True
-
 # ----- SUBFLOWS ----------------------------------------------------------------# 
 # preparing precipitation data for grade calculation
 @flow(name='precipitation-forecast-prep-subflow', log_prints=True)
@@ -377,9 +369,7 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
     lp_da_norm = lp_da_norm.squeeze()
     lp_da_norm_resamp = interpolate_light_pollution_task(lp_da_norm,
                                                     target_lat,
-                                                    target_lon,
-                                                    method='nearest'
-                                                    )
+                                                    target_lon)
     
     # stack 2D LP array across a new "step" dimension
     lightpollution_3d = xr.concat(
@@ -389,6 +379,8 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
         valid_time=valid_time)
     
     return lightpollution_3d
+
+light_pollution_prep_subflow()
 
 # ----- FLOWS ----------------------------------------------------------------#
 # ----- Stargazing Grade Calculation Flow -----
@@ -440,7 +432,7 @@ def main_stargazing_calc_flow():
     w_lp = 1
     w_moon = 0.2
 
-    stargazing_grades = grade_stargazing(clouds_da, precip_grades, 
+    stargazing_grades = grade_stargazing(clouds_grades, precip_grades, 
                                          lp_grades, moon_grades,
                                          w_cloud, w_precip, w_lp, w_moon)
 
