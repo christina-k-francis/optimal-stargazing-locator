@@ -270,7 +270,6 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
         target_lat: latitude coordinate from NWS df
         target_lon: longitude coordinate from NWS df
     """
-    from skyfield.api import load, wgs84
     logger = logging_setup()
     logger.info('Subflow: prepping moon data for grading')
     # importing ephemeris data
@@ -385,7 +384,7 @@ light_pollution_prep_subflow()
 # ----- FLOWS ----------------------------------------------------------------#
 # ----- Stargazing Grade Calculation Flow -----
 @flow(name="main-stargazing-calc-flow", log_prints=True)
-def main_stargazing_calc_flow():
+def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger = logging_setup()
     logger.info('preparing meteorological and astronomical data...')
     clouds_da = cloud_cover_forecast_prep_subflow()
@@ -466,10 +465,11 @@ def main_stargazing_calc_flow():
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
-    logger.info(('generating stargazing grade tileset'))
-    generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)),
-                              "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
-    
+    if skip_stargazing_tiles == False:
+        logger.info(('generating stargazing grade tileset'))
+        generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)),
+                                "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
+        
     logger.info('creating GIF of latest stargazing condition grades forecast')
     create_stargazing_gif(stargazing_ds['grade_num'],
                           'Stargazing Conditions Grades',

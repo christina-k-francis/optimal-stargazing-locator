@@ -35,5 +35,5 @@ def stargazing_orchestration_flow():
     log_memory_usage("before running the stargazing grade calc flow")
 
     # Now we'll run the main Stargazing Grade calculator flow
-    main_stargazing_calc_flow()
+    main_stargazing_calc_flow(skip_stargazing_tiles=True)
     logger.info("main stargazing calc flow completed.")
