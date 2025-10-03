@@ -66,10 +66,15 @@ def get_precip_probability():
         expanded_times.extend([time1, time2])
     # concat into a single dataset
     expanded_precip = xr.concat(expanded_data, dim='step')
+
+    # calculate the step dim as timedelta object from the first valid_time entry
+    reference_time = np.datetime64(expanded_times[0])
+    step_timedeltas = [np.timedelta64(t - reference_time) for t in expanded_times]
+
     # assign new step and valid_time coordinates to ensure no duplicates
     expanded_precip = expanded_precip.assign_coords({
         "valid_time": ("step", expanded_times),
-        "step": np.arange(len(expanded_times))  # clean numeric step index
+        "step": step_timedeltas  # timedelta64 values relative to reference time
         })
     # Preserving valuable attribute info
     expanded_precip.attrs.update(combined_ds.attrs)
