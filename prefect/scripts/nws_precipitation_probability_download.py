@@ -79,7 +79,6 @@ def get_precip_probability():
     gc.collect()
     
     # Uploading zarr file to storage bucket
-    logger.info("Saving Resultant Dataset to Cloud...")
     upload_zarr_dataset(expanded_precip, "processed-data/PrecipProb_Latest.zarr")
 
     return expanded_precip

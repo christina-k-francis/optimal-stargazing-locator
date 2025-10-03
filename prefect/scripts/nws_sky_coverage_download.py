@@ -55,7 +55,6 @@ def get_sky_coverage():
     gc.collect()
 
     # Uploading zarr file to storage bucket
-    logger.info("Saving Resultant Dataset to Cloud...")
     upload_zarr_dataset(combined_ds, "processed-data/SkyCover_Latest.zarr")
 
     return combined_ds

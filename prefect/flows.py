@@ -20,7 +20,7 @@ def download_sky_task():
     """ download latest cloud coverage forecast from NWS  """
     from scripts.nws_sky_coverage_download import get_sky_coverage
     ds = get_sky_coverage()
-    return 
+    return ds
 
 @task(log_prints=True, retries=3)
 def download_precip_task():
