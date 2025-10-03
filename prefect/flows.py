@@ -3,16 +3,16 @@ A script for organizing overarching prefect flows
 """
 
 
-from prefect import flow, task
-from prefect.logging import get_run_logger
-import gc
 import xarray as xr
 import numpy as np
 import pandas as pd
-# import custom functions/modules
+from prefect import flow, task
+# custom fxs
 from scripts.utils.gif_tools import create_nws_gif, create_stargazing_gif
 from scripts.utils.tile_tools import generate_tiles_from_zarr, generate_stargazing_tiles
 from scripts.utils.upload_download_tools import upload_zarr_dataset, load_zarr_from_R2, load_tiff_from_R2
+from scripts.utils.logging_tools import logging_setup
+
 
 # ----- TASKS ----------------------------------------------------------------#
 @task(log_prints=True, retries=3)
@@ -25,8 +25,8 @@ def download_sky_task():
 @task(log_prints=True, retries=3)
 def download_precip_task():
     """ download latest precip forecast from NWS """
-    from scripts.nws_precipitation_probability_download import get_precipitation_prob
-    ds = get_precipitation_prob()
+    from scripts.nws_precipitation_probability_download import get_precip_probability
+    ds = get_precip_probability()
     return ds
 
 @task(log_prints=True, retries=3)
@@ -36,9 +36,14 @@ def create_gif_task(ds, colormap, cbar_label, title):
     return True
 
 @task(log_prints=True, retries=5)
-def gen_tiles_task(ds, layer_name, out_dir, res, cmap):
+def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap, skip_tiles=False):
     """ generate tiles from a NWS data array """
-    generate_tiles_from_zarr(ds, layer_name, out_dir, res, cmap)
+    if skip_tiles:
+        logger = logging_setup()
+        logger.warning(f"Skipping tile generation for {layer_name} (skip_tiles=True)")
+        return True
+    
+    generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, cmap)
     return True
 
 # stargazing grade calculation tasks
@@ -179,7 +184,7 @@ def grade_dataset(var_da, data_name):
         dask="parallelized", output_dtypes=[np.int64])
         return grades
     else:
-        logger = get_run_logger
+        logger = logging_setup()
         logger.error('letter grade conversion application failed')
 
 @task(retries=3)
@@ -229,7 +234,7 @@ def main_stargazing_task():
 # preparing precipitation data for grade calculation
 @flow(name='precipitation-forecast-prep-subflow', log_prints=True)
 def precip_forecast_prep_subflow():
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('Subflow: prepping precip data for grading')    
     precip_da = load_zarr_from_R2('optimal-stargazing-locator', "processed-data/PrecipProb_Latest.zarr")['unknown']
     # normalize the precipitation data on a scale (0=no rain, 1=100% Showers)
@@ -246,7 +251,7 @@ def precip_forecast_prep_subflow():
 # preparing cloud cover data for grade calculation
 @flow(name='cloud-cover-forecast-prep-subflow', log_prints=True)
 def cloud_cover_forecast_prep_subflow():
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('Subflow: prepping clouds cover data for grading')    
     clouds_da = load_zarr_from_R2('optimal-stargazing-locator', "processed-data/SkyCover_Latest.zarr")['unknown']
     # normalize the sky coverage data on a scale (0=blue skies, 1=totally cloudy)
@@ -272,7 +277,7 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
         target_lon: longitude coordinate from NWS df
     """
     from skyfield.api import load, wgs84
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('Subflow: prepping moon data for grading')
     # importing ephemeris data
     # ephemeris: the calculated positions of a celestial body over time in documentation
@@ -349,7 +354,7 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
         steps: steps dimension data from NWS da
         valid_time: valid_time dimension data from NWS da
     """
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('Subflow: prepping light pollution data for grading')
     # import High-Res Artificial Night Sky Brightness data from David Lorenz 
     lightpollution_da = load_tiff_from_R2(bucket_name,
@@ -387,7 +392,7 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
 # ----- Stargazing Grade Calculation Flow -----
 @flow(name="main-stargazing-calc-flow", log_prints=True)
 def main_stargazing_calc_flow():
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('preparing meteorological and astronomical data...')
     clouds_da = cloud_cover_forecast_prep_subflow()
     precip_da = precip_forecast_prep_subflow()
@@ -479,7 +484,7 @@ def main_stargazing_calc_flow():
 # ----- Preprocessing Precipitation data -----
 @flow(name='precipitation-forecast-download-flow', log_prints=True)
 def precipitation_forecast_flow():
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('Flow: Retrieving Precipitation Data')
     ds = download_precip_task()
     logger.info('downloaded latest forecast')
@@ -490,7 +495,7 @@ def precipitation_forecast_flow():
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "precip_probability", 
                                   "data-layer-tiles/PrecipProb_Tiles",
-                                  0.01, "ocean_r")
+                                  0.01, "ocean_r", skip_tiles=True)
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Precipitation Complete!')
@@ -498,7 +503,7 @@ def precipitation_forecast_flow():
 # ----- Preprocessing Cloud Cover data -----
 @flow(name='cloud-cover-forecast-download-flow', log_prints=True)
 def cloud_cover_forecast_flow():
-    logger = get_run_logger
+    logger = logging_setup()
     logger.info('Flow: Retrieving Cloud Cover Data')
     ds = download_sky_task()
     logger.info('downloaded latest forecast')
@@ -509,7 +514,7 @@ def cloud_cover_forecast_flow():
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "cloud_coverage", 
                                   "data-layer-tiles/SkyCover_Tiles",
-                                  0.05, "bone")
+                                  0.05, "bone", skip_tiles=True)
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Cloud Cover Complete!')
