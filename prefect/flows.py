@@ -379,8 +379,6 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
     
     return lightpollution_3d
 
-light_pollution_prep_subflow()
-
 # ----- FLOWS ----------------------------------------------------------------#
 # ----- Stargazing Grade Calculation Flow -----
 @flow(name="main-stargazing-calc-flow", log_prints=True)
