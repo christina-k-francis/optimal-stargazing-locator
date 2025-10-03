@@ -128,6 +128,7 @@ def download_grib_with_retries(url, variable_key, max_retries=5, timeout=90):
                 decode_timedelta="CFTimedeltaCoder"
             )[variable_key].load()
 
+            logger.info(f"✅ Successfully downloaded the GRIB2 file")
             os.remove(temp_file_path)
             return ds
 
