@@ -9,6 +9,7 @@ import pandas as pd
 # tile generation
 import affine
 import subprocess
+from osgeo_utils import gdal2tiles
 # cloud connection
 import boto3
 import time
@@ -97,11 +98,13 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
             ) as dst:
                 for band in range(3):
                     dst.write(rgb_img[:, :, band], band + 1)
-
+            
             # Generate tiles from RGB GeoTIFF
-            subprocess.run([
-                "gdal2tiles.py", "-z", "0-8", str(geo_path), str(tile_output_dir)
-            ], check=True)
+            gdal2tiles.main([
+                '-z', '0-8',
+                str(geo_path),
+                str(tile_output_dir)
+            ])
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
@@ -408,9 +411,11 @@ def generate_stargazing_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_na
                 )
 
             # Generate tiles from RGB GeoTIFF
-            subprocess.run([
-                "gdal2tiles.py", "-z", "0-8", str(geo_path), str(tile_output_dir)
-            ], check=True)
+            gdal2tiles.main([
+                '-z', '0-8',
+                str(geo_path),
+                str(tile_output_dir)
+            ])
 
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
             
