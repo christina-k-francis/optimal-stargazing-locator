@@ -33,6 +33,11 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
     - storage_path_prefix (str): R2 key prefix (e.g., processed-data/Temp_Latest.zarr)
     - bucket_name (str): R2 storage bucket (default "maps")
     """
+    # suppress dask task logging
+    import logging
+    logging.getLogger("distributed").setLevel(logging.WARNING)
+    logging.getLogger("dask").setLevel(logging.WARNING)
+
     logger = logging_setup()
     
     # Cloud Access Variables
