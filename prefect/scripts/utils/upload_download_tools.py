@@ -61,6 +61,8 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
     try:
         zarr_path = os.path.join(tmpdir, "data.zarr")
         logger.info("Writing dataset to Zarr...")
+        # compute dask arrays to avoid serialization issues
+        nws_ds = nws_ds.compute()  # Load into memory
         nws_ds.to_zarr(zarr_path, mode="w", consolidated=True)
 
         logger.info("Uploading Zarr dataset to Cloudflare R2...")

@@ -123,7 +123,7 @@ def interpolate_light_pollution_task(lp_data, target_lat, target_lon):
 @task(retries=3)
 def grade_stargazing(cloud_grades, precip_grades, lp_grades, moon_grades,
                      w_cloud, w_precip, w_lp, w_moon):
-    """ combining variable letter grades to evaluate overall stargazing conditions """
+    """ calculate weighted average of letter grades to evaluate overall stargazing conditions """
     def combine_grades(p, c, lp, m):
         vals = []
         weights = []
@@ -151,9 +151,9 @@ def grade_stargazing(cloud_grades, precip_grades, lp_grades, moon_grades,
     grades = xr.apply_ufunc(
         np.vectorize(combine_grades),
         precip_grades, cloud_grades, lp_grades, moon_grades,
-        dask="parallelized", output_dtypes=[np.int64])
+        dask="parallelized", output_dtypes=[np.int8])
     
-    return grades
+    return grades.astype('int8')
 
 # ----- SUBFLOWS ----------------------------------------------------------------# 
 # preparing precipitation data for grade calculation
@@ -405,9 +405,15 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
         moon_grades.rename("grade_moon")
     ], combine_attrs='no_conflicts')
 
-    stargazing_ds = stargazing_ds.chunk(target_chunks)
+    # mitigating sources for error 
     for var in stargazing_ds.data_vars:
+        # ensure proper numeric dtype
+        stargazing_ds[var] = stargazing_ds[var].astype('int8')  
+        # remove old encoding->new metadata infers current state
         stargazing_ds[var].encoding.clear()
+    # ensuring chunk alignment
+    stargazing_ds = stargazing_ds.chunk(target_chunks)
+
 
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")

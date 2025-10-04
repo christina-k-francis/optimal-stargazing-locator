@@ -50,23 +50,23 @@ def grade_dataset(var_da, data_name):
     if data_name == 'lp':
         grades = xr.apply_ufunc(
         np.vectorize(grade_lightpollution), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
+        dask="parallelized", output_dtypes=[np.int8])
+        return grades.astype('int8') # force int8 to save mem
     if data_name == 'clouds':
         grades = xr.apply_ufunc(
         np.vectorize(grade_cloud), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
+        dask="parallelized", output_dtypes=[np.int8])
+        return grades.astype('int8')
     if data_name == 'precip':
         grades = xr.apply_ufunc(
         np.vectorize(grade_precip), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
+        dask="parallelized", output_dtypes=[np.int8])
+        return grades.astype('int8')
     if data_name == 'moon':
         grades = xr.apply_ufunc(
         np.vectorize(grade_moon), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
+        dask="parallelized", output_dtypes=[np.int8])
+        return grades.astype('int8')
     else:
         logger = logging_setup()
         logger.error('letter grade conversion application failed')
