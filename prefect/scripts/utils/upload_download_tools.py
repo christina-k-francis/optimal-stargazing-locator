@@ -59,6 +59,10 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
         nws_ds.to_zarr(zarr_path, mode="w", consolidated=True)
 
         logger.info("Uploading Zarr dataset to Cloudflare R2...")
+        # count files for progress tracking
+        total_files = sum(len(files) for _, _, files in os.walk(zarr_path))
+        uploaded = 0
+
         for root, _, files in os.walk(zarr_path):
             for file in files:
                 local_file_path = os.path.join(root, file)
@@ -78,6 +82,10 @@ def upload_zarr_dataset(nws_ds, storage_path_prefix: str,
                                 r2_key,
                                 ExtraArgs={"ContentType": mime_type}
                             )
+                        uploaded += 1
+                        # Only log progress every 50 files
+                        if uploaded % 50 == 0 or uploaded == total_files:
+                            logger.info(f"Upload progress: {uploaded}/{total_files} files")    
                         break  # successful upload
                     except Exception as e:
                         logger.warning(f"Upload failed for {relative_path} (attempt {attempt}): {e}")

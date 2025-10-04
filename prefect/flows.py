@@ -383,6 +383,11 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
 # ----- Stargazing Grade Calculation Flow -----
 @flow(name="main-stargazing-calc-flow", log_prints=True)
 def main_stargazing_calc_flow(skip_stargazing_tiles=False):
+    # suppress Dask task logging
+    import logging
+    logging.getLogger("distributed").setLevel(logging.WARNING)
+    logging.getLogger("dask").setLevel(logging.WARNING)
+
     logger = logging_setup()
     logger.info('preparing meteorological and astronomical data...')
     clouds_da = cloud_cover_forecast_prep_subflow()
