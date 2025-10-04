@@ -387,11 +387,24 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger.info('preparing meteorological and astronomical data...')
     clouds_da = cloud_cover_forecast_prep_subflow()
     precip_da = precip_forecast_prep_subflow()
+   
     # ensuring that NWS datasets cover same forecast datetimes
     precip_da = precip_da[np.isin(precip_da['valid_time'].values,
                                              clouds_da['valid_time'].values)]
     clouds_da = clouds_da[np.isin(clouds_da['valid_time'].values,
                                                  precip_da['valid_time'].values)]
+   
+    # we have to recalculate the 'step' dim since we have a new forecast start datetime
+    reference_time = clouds_da['valid_time'].values[0]
+    # recalculate step for clouds
+    clouds_steps = [np.timedelta64(t - reference_time) 
+                    for t in clouds_da['valid_time'].values]
+    clouds_da = clouds_da.assign_coords({'step': clouds_steps})
+    # recalculate step for precip
+    precip_steps = [np.timedelta64(t - reference_time) 
+                    for t in precip_da['valid_time'].values]
+    precip_da = precip_da.assign_coords({'step': precip_steps})
+   
     moon_da = moon_data_prep_subflow(clouds_da["valid_time"].values, 
                                      clouds_da['step'].data,
                                      clouds_da.latitude, 
@@ -402,7 +415,6 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
                                          clouds_da.sizes['step'],
                                          clouds_da['step'],
                                          clouds_da['valid_time'])
-   
     
     logger.info('evaluating variable effects on stargazing conditions...')
     # ensuring that datasets are aligned chunk-wise
@@ -452,7 +464,7 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     stargazing_ds = xr.merge([
         stargazing_grades.rename("grade_num"),
         precip_grades.rename("grade_precip"),
-        cloud_grades.rename("grade_cloud"),
+        clouds_grades.rename("grade_cloud"),
         lp_grades.rename("grade_lightpollution"),
         moon_grades.rename("grade_moon")
     ], combine_attrs='no_conflicts')
