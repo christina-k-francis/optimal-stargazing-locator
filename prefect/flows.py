@@ -10,6 +10,7 @@ from prefect import flow, task
 import pytz
 from skyfield.api import load, wgs84
 # custom fxs
+from scripts.utils.grade_tools import grade_dataset
 from scripts.utils.gif_tools import create_nws_gif, create_stargazing_gif
 from scripts.utils.tile_tools import generate_tiles_from_zarr, generate_stargazing_tiles
 from scripts.utils.upload_download_tools import upload_zarr_dataset, load_zarr_from_R2, load_tiff_from_R2
@@ -118,76 +119,6 @@ def interpolate_light_pollution_task(lp_data, target_lat, target_lon):
         method='nearest'
     )
     return lightpollution_da_norm_resampled
-
-@task(retries=3)
-def grade_precip(p):
-    """ convert given precipitation probability value to letter grade,
-    where -1=NA, 0=A+, 1=A, 2=B, 3=C, 4=D, 5=F """
-    if np.isnan(p): return -1
-    if p > 0.5: return 5
-    elif p > 0.2: return 3
-    elif p > 0.05: return 2
-    else: return 0
-
-@task(retries=3)
-def grade_cloud(c):
-    """ convert given sky cover percent value to letter grade,
-    where -1=NA, 0=A+, 1=A, 2=B, 3=C, 4=D, 5=F """
-    if np.isnan(c): return -1
-    if c >= 1.0: return 5
-    elif c > 0.75: return 5
-    elif c > 0.5: return 4
-    elif c > 0.2: return 2
-    else: return 0
-
-@task(retries=3)
-def grade_lightpollution(lp):
-    """ convert given light pollution magnitude to letter grade, 
-    where -1=NA, 0=A+, 1=A, 2=B, 3=C, 4=D, 5=F """
-    if np.isnan(lp): return -1
-    if lp >= 0.85: return 0
-    elif lp >= 0.70: return 1
-    elif lp >= 0.55: return 2
-    elif lp >= 0.40: return 3
-    elif lp >= 0.25: return 4
-    else: return 5
-
-@task(retries=3)
-def grade_moon(m):
-    """ convert given moon illumination percent value to letter grade, 
-    where -1=NA, 0=A+, 1=A, 2=B, 3=C, 4=D, 5=F """
-    if np.isnan(m): return -1
-    if m > 0.75: return 4
-    elif m > 0.5: return 3
-    elif m > 0.25: return 2
-    else: return 0
-
-@task(log_prints=True, retries=3)
-def grade_dataset(var_da, data_name):
-    """ apply letter grade conversion function to given data array variable """
-    if data_name == 'lp':
-        grades = xr.apply_ufunc(
-        np.vectorize(grade_lightpollution), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
-    if data_name == 'clouds':
-        grades = xr.apply_ufunc(
-        np.vectorize(grade_cloud), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
-    if data_name == 'precip':
-        grades = xr.apply_ufunc(
-        np.vectorize(grade_precip), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
-    if data_name == 'moon':
-        grades = xr.apply_ufunc(
-        np.vectorize(grade_moon), var_da,
-        dask="parallelized", output_dtypes=[np.int64])
-        return grades
-    else:
-        logger = logging_setup()
-        logger.error('letter grade conversion application failed')
 
 @task(retries=3)
 def grade_stargazing(cloud_grades, precip_grades, lp_grades, moon_grades,
