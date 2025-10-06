@@ -172,7 +172,7 @@ def rescale_timedelta_coords(ds, coord_name='time'):
 
     coord = ds.coords[coord_name]
 
-    # Check if the values are excessively large (common for nanosecond overflow)
+    # check if the values are excessively large (common for nanosecond overflow)
     if np.abs(coord.values.astype('datetime64[ns]').astype(np.int64)) > 1e18:
         one_hour = np.timedelta64(1, 'h')
         coord.values = np.timedelta64(int(ds['step'].values/one_hour))
@@ -191,7 +191,7 @@ def rescale_timedelta_coords(ds, coord_name='time'):
             coord.encoding['units'] = "hours"
             return coord
     else:
-        return coord  # No need to adjustdef rescale_timedelta_coords(ds, coord_name='time'):
+        return coord 
     
 def generate_moon_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="gist_yarg"):
     """
@@ -204,7 +204,7 @@ def generate_moon_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="gi
     - sleep_secs (int): Delay between tile uploads
     - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
     """
-
+    logger = logging_setup()
 
     bucket_name = "optimal-stargazing-locator"
     MAX_RETRIES = 5
@@ -328,16 +328,17 @@ def generate_moon_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="gi
  
 def generate_stargazing_tiles(ds, layer_name, R2_prefix, sleep_secs, colormap_name="viridis"):
     """
-    Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
+    Description:
+        Converts a Zarr dataset to colored raster tiles per time step using a Matplotlib colormap.
 
-    Parameters:
-    - ds (xarray data array): stargazing grade number xarray dataset with dimensions [step, y, x]
-    - layer_name (str): Label for the tiles (e.g., "grade number, index, etc.")
-    - R2_prefix (str): Path prefix inside R2 bucket
-    - sleep_secs (int): Delay between tile uploads
-    - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
+    Input:
+        - ds (xarray data array): stargazing grade number xarray dataset with dimensions [step, y, x]
+        - layer_name (str): Label for the tiles (e.g., "grade number, index, etc.")
+        - R2_prefix (str): Path prefix inside R2 bucket
+        - sleep_secs (int): Delay between tile uploads
+        - colormap_name (str): Name of Matplotlib colormap (e.g., "Blues", "coolwarm")
     """
-
+    logger = logging_setup()
 
     bucket_name = "optimal-stargazing-locator"
     MAX_RETRIES = 5
