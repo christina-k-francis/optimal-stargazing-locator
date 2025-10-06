@@ -45,9 +45,9 @@ def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap, skip_tiles=False
         logger = logging_setup()
         logger.warning(f"Skipping tile generation for {layer_name} (skip_tiles=True)")
         return True
-    
-    generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, cmap)
-    return True
+    else:
+        generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, cmap)
+        return True
 
 # stargazing grade calculation tasks
 @task(retries=3)
@@ -430,7 +430,7 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
 
 # ----- Preprocessing Precipitation data -----
 @flow(name='precipitation-forecast-download-flow', log_prints=True)
-def precipitation_forecast_flow():
+def precipitation_forecast_flow(skip_tiles=False):
     logger = logging_setup()
     logger.info('Flow: Retrieving Precipitation Data')
     ds = download_precip_task()
@@ -442,14 +442,14 @@ def precipitation_forecast_flow():
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "precip_probability", 
                                   "data-layer-tiles/PrecipProb_Tiles",
-                                  0.01, "ocean_r", skip_tiles=True)
+                                  0.01, "ocean_r", skip_tiles=skip_tiles)
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Precipitation Complete!')
     
 # ----- Preprocessing Cloud Cover data -----
 @flow(name='cloud-cover-forecast-download-flow', log_prints=True)
-def cloud_cover_forecast_flow():
+def cloud_cover_forecast_flow(skip_tiles=False):
     logger = logging_setup()
     logger.info('Flow: Retrieving Cloud Cover Data')
     ds = download_sky_task()
@@ -461,7 +461,7 @@ def cloud_cover_forecast_flow():
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "cloud_coverage", 
                                   "data-layer-tiles/SkyCover_Tiles",
-                                  0.05, "bone", skip_tiles=True)
+                                  0.05, "bone", skip_tiles=skip_tiles)
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Cloud Cover Complete!')

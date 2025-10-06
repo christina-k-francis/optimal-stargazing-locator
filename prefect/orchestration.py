@@ -16,13 +16,13 @@ def stargazing_orchestration_flow():
     logger = logging_setup()
     log_memory_usage("at the start of the main orchestration script")
 
-    # run downloading/preprocessing flows as parallel tasks
-    sky_future = cloud_cover_forecast_flow(return_state=True)
-    precip_future = precipitation_forecast_flow(return_state=True)
+    # run downloading/preprocessing flows
+    sky_future = cloud_cover_forecast_flow(skip_tiles=True, return_state=True)
+    precip_future = precipitation_forecast_flow(skip_tiles=True, return_state=True)
 
     logger.info("Triggered sky coverage and precipitation flows concurrently.")
 
-    # check if they completed successfully
+    # check if the flows completed successfully
     if sky_future.is_failed():
         logger.error("Sky coverage flow failed!")
         raise Exception("Sky coverage flow failed")
