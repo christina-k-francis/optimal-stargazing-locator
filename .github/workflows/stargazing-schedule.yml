@@ -18,8 +18,17 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install GDAL system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev
+          export GDAL_VERSION=$(gdal-config --version)
+          echo "GDAL_VERSION=$GDAL_VERSION" >> $GITHUB_ENV
+      
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install GDAL==$(gdal-config --version)
+          pip install -r crequirements.txt
 
       - name: Run orchestration flow
         env:
