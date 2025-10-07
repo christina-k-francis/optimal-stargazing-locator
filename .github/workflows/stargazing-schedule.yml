@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install GDAL==$(gdal-config --version)
-          pip install -r crequirements.txt
+          pip install -r requirements.txt
 
       - name: Run orchestration flow
         env:
