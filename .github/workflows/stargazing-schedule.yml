@@ -2,7 +2,7 @@ name: Stargazing Forecast Execution Schedule
 
 on:
   schedule:
-    - cron: '0 8,20 ***' # runs @ 8AM/8PM UTC
+    - cron: '0 8,20 * * *' # runs @ 8AM/8PM UTC
   workflow_dispatch: # allows manual triggers
 
 jobs:
@@ -29,5 +29,6 @@ jobs:
           R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
           R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
           GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
-        run: |
-          python -c "from prefect.orchestration import stargazing_orchestration_flow; stargazing_orchestration_flow()"
+        run:  |
+          cd prefect
+          python -c "from orchestration import stargazing_orchestration_flow; stargazing_orchestration_flow()"
