@@ -9,6 +9,17 @@ jobs:
   run-stargazing-flow:
     runs-on: ubuntu-latest
 
+    env:
+        # R2 credentials
+        R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+        R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+        # prefect credentials
+        PREFECT_API_URL: ${{ secrets.PREFECT_API_URL }}
+        PREFECT_API_KEY: ${{ secrets.PREFECT_API_KEY }}
+        # github credentials
+        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -31,13 +42,6 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run orchestration flow
-        env:
-          PREFECT_API_URL: ${{ secrets.PREFECT_API_URL }}
-          PREFECT_API_KEY: ${{ secrets.PREFECT_API_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
         run:  |
           cd prefect
           python -c "from orchestration import stargazing_orchestration_flow; stargazing_orchestration_flow()"
