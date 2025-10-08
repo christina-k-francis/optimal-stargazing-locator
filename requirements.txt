@@ -13,6 +13,7 @@ pytz
 rasterio==1.4.3
 requests
 rioxarray==0.18.2
+scipy
 s3fs
 skyfield
 xarray==2025.3.0
