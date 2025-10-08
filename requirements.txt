@@ -1,5 +1,6 @@
 affine>=2.4.0
 boto3
+cfgrib
 Cartopy==0.24.1
 dask
 matplotlib==3.10.3
