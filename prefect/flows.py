@@ -403,7 +403,7 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
         clouds_grades.rename("grade_cloud"),
         lp_grades.rename("grade_lightpollution"),
         moon_grades.rename("grade_moon")
-    ], combine_attrs='no_conflicts')
+    ], combine_attrs='no_conflicts', compat='override')
 
     # mitigating sources for error 
     for var in stargazing_ds.data_vars:
