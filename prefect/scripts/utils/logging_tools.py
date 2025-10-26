@@ -10,8 +10,9 @@ from prefect import get_run_logger
 
 def logging_setup(silence_packages: list[str] = None):
     """
-    This FX is a boilerplate for setting up logging at the top 
-    of all flows, subflows, and tasks that require it.
+    description:
+        this FX is a boilerplate for setting up logging at the top 
+        of all flows, subflows, and tasks that require it.
     """
     logger = get_run_logger()
 
@@ -28,7 +29,8 @@ def logging_setup(silence_packages: list[str] = None):
 
 def log_memory_usage(stage: str):
     """
-    Logs the RAM usage (RSS Memory) at its position in the script.
+    description:
+        Logs the RAM usage (RSS Memory) at its position in the script.
     
     input:
         stage (str): A label for the stage in execution where memory is measured.
