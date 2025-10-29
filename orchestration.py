@@ -21,8 +21,8 @@ def stargazing_orchestration_flow():
     # run downloading/preprocessing flows in parallel
     with ThreadPoolExecutor(max_workers=2) as executor:
         # Submit both flows to run in parallel
-        sky_flow = executor.submit(cloud_cover_forecast_flow, skip_tiles=True)
-        precip_flow = executor.submit(precipitation_forecast_flow, skip_tiles=True)
+        sky_flow = executor.submit(cloud_cover_forecast_flow, skip_tiles=False)
+        precip_flow = executor.submit(precipitation_forecast_flow, skip_tiles=False)
         
         # Wait for both to complete and collect results
         flows = {
@@ -50,5 +50,5 @@ def stargazing_orchestration_flow():
     log_memory_usage("before running the stargazing grade calc flow")
 
     # Now we'll run the main Stargazing Grade calculator flow
-    main_stargazing_calc_flow(skip_stargazing_tiles=True)
+    main_stargazing_calc_flow(skip_stargazing_tiles=False)
     logger.info("Orchestration Complete!")
