@@ -15,6 +15,8 @@ import io
 from PIL import Image
 import pytz
 # plotting
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -43,14 +45,14 @@ def create_nws_gif(nws_ds, cmap, cbar_label, data_title,
     
         fig = plt.figure(figsize=(12,6))
         ax = fig.add_subplot(1,1,1, projection=ccrs.PlateCarree())
-        plt.pcolormesh(lon2d, lat2d, plotting_data, cmap=cmap)
+        plot = ax.pcolormesh(lon2d, lat2d, plotting_data, cmap=cmap)
         gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False, linewidth=0.5) # type: ignore
         ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) # type: ignore
         ax.add_feature(cfeature.BORDERS, linestyle=':') # type: ignore
         ax.coastlines(resolution='110m', zorder=3) # type: ignore
         gl.top_labels=False
-        plt.clim(0,100)
-        plt.colorbar(ax=ax, 
+        plot.set_clim(0,100)
+        fig.colorbar(plot, ax=ax, 
                      orientation='vertical', 
                      pad=0.1,
                      label=f'{cbar_label}', 
