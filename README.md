@@ -1,22 +1,20 @@
 # Optimal Stargazing Locator
 
-A web application that allows users to see a 6-day forecast of stargazing conditions over any region in the continental United States, using light pollution data from David Lorenz, and meteorological data from the U.S. National Weather Service.
+A web application that allows users to see a 6-day forecast of stargazing conditions over any region in the continental United States using 2024 static light pollution data from [David J. Lorenz](https://djlorenz.github.io/astronomy/lp/), meteorological data from the [U.S. National Weather Service](https://digital.weather.gov/), and moon phase and moon altitude data from [NASA's Jet Propulsion Laboratory (JPL)](https://ssd.jpl.nasa.gov/planets/eph_export.html).  
 
 ---
 
-## Overview 🌌
+## Overview
 
-The Optimal Stargazing Locator is a geospatial web tool designed to help users find the best times and places for stargazing in the U.S. (and eventually the globe). By integrating satellite-derived light pollution data, meteorological cloud cover forecasts, precipitation forecasts, moon phase, and moon altitude information, the application evaluates stargazing conditions and provides location-based quality ratings across the U.S.
-
-This project combines backend geospatial processing, automated data pipelines, and a React-based frontend with interactive map layers.
+The Optimal Stargazing Locator is a geospatial web tool designed to help users find the best times and places for stargazing in the Continental U.S. I combine satellite-derived light pollution data, meteorological cloud cover forecasts, precipitation forecasts, moon phase, and moon altitude information to evaluate stargazing conditions and consequently provide location-based letter grade ratings across the United States.
 
 ---
 
 ## Features
 
-* High-resolution **light pollution map** representing the latest version of the World Atlas of the Artificial Night Sky Brightness, developed by David J. Lorenz, based on Pierantonio Cinzano's original atlas, using more recent VIIRS satellite data from 2024
+* A high-resolution **light pollution map** representing the latest version of the World Atlas of the Artificial Night Sky Brightness developed by [David J. Lorenz](https://djlorenz.github.io/astronomy/lp/) using more recent VIIRS satellite data from 2024. His methodology is based on the one described in [Pierantonio Cinzano's original atlas](http://www.lightpollution.it/cinzano/download/0108052.pdf).
 * 7-day **cloud cover**, **precipitation**, **temperature**, and **relative humidity** forecasts from the NOAA National Weather Service, processed and tiled for efficient map rendering
-* Dynamic **Stargazing Grade** calculation incorporating light pollution, cloud cover, precipitation, and moon illumination data
+* Dynamic **Stargazing Grade** calculation incorporating aforementioned astronomical and meteorological data.
 * Location search with instant visibility grade summary
 * Supabase-hosted GeoTIFF->map tiles and Zarr datasets served to the frontend
 * Automated data pipeline running every 6 hours to get the latest weather data via Render cron jobs
