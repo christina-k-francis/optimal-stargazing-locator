@@ -43,5 +43,4 @@ jobs:
           # github credentials
           GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
         run:  |
-          cd prefect
           python -c "from orchestration import stargazing_orchestration_flow; stargazing_orchestration_flow()"
