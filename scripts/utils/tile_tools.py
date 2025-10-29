@@ -50,7 +50,9 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
 
         with tempfile.TemporaryDirectory() as tmpdir:
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
+            print(f"{geo_path}")
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
+            print(f"{tile_output_dir}")
 
             # Extract transform based on attributes and GRIB metadata
             dx = slice_2d.attrs["GRIB_DxInMetres"]
