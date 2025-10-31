@@ -2,7 +2,6 @@
 Here are function(s) useful for tile generation of multidimensional xarray datasets/zarr files
 """
 
-
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -11,6 +10,7 @@ import affine
 import subprocess
 from osgeo_utils import gdal2tiles
 # cloud connection
+import os
 import boto3
 import time
 # file handling
