@@ -50,9 +50,9 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
 
         with tempfile.TemporaryDirectory() as tmpdir:
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{i}.tif"
-            print(f"{geo_path}")
+            print(f"geotiff filepath: {geo_path}")
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
-            print(f"{tile_output_dir}")
+            print(f"output dir: {tile_output_dir}")
 
             # Extract transform based on attributes and GRIB metadata
             dx = slice_2d.attrs["GRIB_DxInMetres"]
@@ -101,13 +101,27 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
                 for band in range(3):
                     dst.write(rgb_img[:, :, band], band + 1)
             
+            # Debug: log the exact command being run
+            cmd = ["gdal2tiles.py", "-z", "0-8", str(geo_path), str(tile_output_dir)]
+            logger.info(f"Running command: {' '.join(cmd)}")
+            logger.info(f"geo_path exists: {geo_path.exists()}")
+            logger.info(f"geo_path type: {type(geo_path)}")
+            
             # Generate tiles from RGB GeoTIFF
-            gdal2tiles.main([
-                '-z', '0-8',
-                str(geo_path),
-                str(tile_output_dir)
-            ])
+            try:
+                result = subprocess.run([
+                        "gdal2tiles.py",
+                        "-z", "0-8",  # Zoom levels
+                        str(geo_path),            
+                        str(tile_output_dir)      
+                    ], check=True, capture_output=True, text=True)
+                logger.info(f"Tiles generated for timestep {i+1}")
 
+            except subprocess.CalledProcessError as e:
+                logger.error(f"gdal2tiles failed for timestep {i}: {e.stderr}")
+                raise
+
+            # Now, let's upload the tile to R2
             timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
             account_id = os.environ["R2_ACCOUNT_ID"]
@@ -153,6 +167,9 @@ def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_nam
 
             log_memory_usage(f"After tileset {i+1}/{len(ds.step.values)}")
             logger.info(f"✅ Tiles for timestep {timestamp_str} uploaded.")
+            # Clean up this timestep's GeoTIFF
+            geo_path.unlink()
+            # del timestep subset
             del slice_2d
             gc.collect()
 
