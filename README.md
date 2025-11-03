@@ -6,10 +6,10 @@ A web application that allows users to see a 6-day forecast of stargazing condit
 
 ## Usage Example
 
-1. Open the Optimal Stargazing Locator web app
-2. Enter your location in the search bar or use the Selector Tool click on any location on the map
-3. View the Stargazing Conditions grade (A-F) for tonight and upcoming days
-4. Explore interactive light pollution, precipitation, cloud cover, and helpful temperature and relative humidity data layers
+1. Open the Optimal Stargazing Locator web application
+2. Enter your location in the search bar or use the Selector Hand Tool to click on any location on the map
+3. View the Stargazing Conditions grade (A-F) for tonight and upcoming days in that region
+4. Explore interactive light pollution, precipitation, and cloud cover map layers
 5. Plan your stargazing trip accordingly!
 
 ## Feedback
@@ -20,15 +20,15 @@ If you have any questions, recommendations for improvements, or bugs to report, 
 
 * NOAA NWS for meteorological forecast data
 * David J. Lorenz for the 2024 Artificial Nighttime Radiance dataset
+* NASA Jet Propulsion Laboratory for Lunar data
 * Cloudflare/R2 for cloud storage
 * Mapbox for map visualization
 * Open-source contributors: Xarray, GDAL, Skyfield, and Rioxarray
 
 ## Future Plans
 
-* Provide viewable GIF dataset forecasts
-* Expand to global coverage
-* Incorporate warning for proximity to urban light dome 
-* Add real-time wind direction and wind speed animations
-* Improve mobile experience
+* Provide viewable GIFs of the forecast for each dataset
+* Incorporate a direction-aware warning for proximity to an urban light dome 
+* Improve the mobile experience
+* Expand the stargazing grade forecast coverage area
 * Incorporate user-submitted stargazing reports
