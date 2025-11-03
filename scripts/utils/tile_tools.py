@@ -5,6 +5,7 @@ Here are function(s) useful for tile generation of multidimensional xarray datas
 import xarray as xr
 import numpy as np
 import pandas as pd
+from prefect import task
 # tile generation
 import affine
 import subprocess
@@ -27,6 +28,7 @@ from matplotlib.colors import Normalize
 # custom fxs
 from scripts.utils.logging_tools import logging_setup, log_memory_usage
 
+@task(log_prints=True, retries=3)
 def upload_tile_to_r2(tile_output_dir, R2_prefix, timestamp_str, sleep_secs):
 
     logger = logging_setup()
@@ -75,6 +77,7 @@ def upload_tile_to_r2(tile_output_dir, R2_prefix, timestamp_str, sleep_secs):
                     else:
                         logger.error(f"Final failure uploading {upload_path}")
 
+@task(log_prints=True, retries=3)
 def generate_single_timestep_tiles(ds, layer_name, R2_prefix, 
                                    timestep_idx, sleep_secs, cmap):
     """
@@ -166,6 +169,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix,
         
         return True
 
+@task(log_prints=True, retries=3)
 def generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, colormap_name="viridis"):
     """
     description:
