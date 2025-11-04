@@ -399,10 +399,6 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
          5: "F"
     }
 
-    # attach metadata
-    stargazing_grades.attrs["legend"] = grade_legend
-    stargazing_grades.attrs["description"] = "Weighted average grading of stargazing conditions"
-
     # merge into final dataset
     stargazing_ds = xr.merge([
         stargazing_grades.rename("grade_num"),
@@ -410,7 +406,11 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
         clouds_grades.rename("grade_cloud"),
         lp_grades.rename("grade_lightpollution"),
         moon_grades.rename("grade_moon")
-    ], combine_attrs='no_conflicts', compat='override')
+    ], combine_attrs='drop_conflicts', compat='override')
+
+    # attach metadata
+    stargazing_ds.attrs["legend"] = grade_legend
+    stargazing_ds.attrs["description"] = "Weighted average grading of stargazing conditions"
 
     # mitigating sources for error 
     for var in stargazing_ds.data_vars:
