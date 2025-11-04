@@ -429,8 +429,9 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
 
     if skip_stargazing_tiles == False:
         logger.info(('generating stargazing grade tileset'))
-        generate_stargazing_tiles(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)),
-                                "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r")
+        gen_tiles_task(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)), 
+                       "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r",
+                       vmin=-1, vmax=5, skip_tiles=skip_stargazing_tiles)
         
     logger.info('creating GIF of latest stargazing condition grades forecast')
     create_stargazing_gif(stargazing_ds['grade_num'],
