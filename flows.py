@@ -12,7 +12,7 @@ from skyfield.api import load, wgs84
 # custom fxs
 from scripts.utils.grade_tools import grade_dataset
 from scripts.utils.gif_tools import create_nws_gif, create_stargazing_gif
-from scripts.utils.tile_tools import generate_tiles_from_zarr, generate_stargazing_tiles
+from scripts.utils.tile_tools import generate_tiles_from_xr, generate_stargazing_tiles
 from scripts.utils.upload_download_tools import upload_zarr_dataset, load_zarr_from_R2, load_tiff_from_R2
 from scripts.utils.logging_tools import logging_setup
 
@@ -39,14 +39,16 @@ def create_gif_task(ds, colormap, cbar_label, title):
     return True
 
 @task(log_prints=True, retries=5)
-def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap, skip_tiles=False):
+def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap, 
+                   vmin=None, vmax=None, skip_tiles=False):
     """ generate tiles from a NWS data array """
     if skip_tiles:
         logger = logging_setup()
         logger.warning(f"Skipping tile generation for {layer_name} (skip_tiles=True)")
         return True
     else:
-        generate_tiles_from_zarr(ds, layer_name, R2_prefix, sleep_secs, cmap)
+        generate_tiles_from_xr(ds, layer_name, R2_prefix, 
+                               sleep_secs, cmap, vmin, vmax)
         return True
 
 # stargazing grade calculation tasks
@@ -449,7 +451,8 @@ def precipitation_forecast_flow(skip_tiles=False):
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "precip_probability", 
                                   "data-layer-tiles/PrecipProb_Tiles",
-                                  0.01, "ocean_r", skip_tiles=skip_tiles)
+                                  0.01, "ocean_r", vmin=0, vmax=100, 
+                                  skip_tiles=skip_tiles)
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Precipitation Complete!')
@@ -468,7 +471,8 @@ def cloud_cover_forecast_flow(skip_tiles=False):
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "cloud_coverage", 
                                   "data-layer-tiles/SkyCover_Tiles",
-                                  0.05, "bone", skip_tiles=skip_tiles)
+                                  0.05, "bone", vmin=0, vmax=100,
+                                  skip_tiles=skip_tiles)
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Cloud Cover Complete!')
