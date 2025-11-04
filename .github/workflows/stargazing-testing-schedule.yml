@@ -1,4 +1,4 @@
-name: Stargazing Forecast Execution Schedule
+name: Stargazing Forecast Test Execution
 
 on:
   schedule:
