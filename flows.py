@@ -53,7 +53,7 @@ def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap, skip_tiles=False
 @task(retries=3)
 def calc_LP_thresholds_task():
     """ calculate light pollution thresholds for normalization """
-    # convert thresholds from Falchi paper from mcd/m² to mag/arcsec²
+    # convert thresholds from Falchi paper in mcd/m² to mag/arcsec²
     falchi_thresholds_mcd = {
         "pristine": 0.176,
         "astro_limit_min": 0.188,
@@ -81,7 +81,7 @@ def calc_LP_thresholds_task():
         falchi_thresholds_mag["artificial_twilight_max"]]
     mag_thresholds.reverse() # flip values in place, so increasing
     normalized_values = [
-        1.0,  # pristine night sky
+        1.0,   # pristine night sky
         0.85,  # limited astronomy
         0.6,   # winter MilkyWay gone
         0.4,   # summer MilkyWay gone
@@ -159,6 +159,8 @@ def grade_stargazing(cloud_grades, precip_grades, lp_grades, moon_grades,
 # preparing precipitation data for grade calculation
 @flow(name='precipitation-forecast-prep-subflow', log_prints=True)
 def precip_forecast_prep_subflow():
+    # Keep attributes during all operations
+    xr.set_options(keep_attrs=True)
     logger = logging_setup()
     logger.info('Subflow: prepping precip data for grading')    
     precip_da = load_zarr_from_R2('optimal-stargazing-locator', "processed-data/PrecipProb_Latest.zarr")['unknown']
@@ -176,10 +178,12 @@ def precip_forecast_prep_subflow():
 # preparing cloud cover data for grade calculation
 @flow(name='cloud-cover-forecast-prep-subflow', log_prints=True)
 def cloud_cover_forecast_prep_subflow():
+    # Keep attributes during all operations
+    xr.set_options(keep_attrs=True)
     logger = logging_setup()
     logger.info('Subflow: prepping clouds cover data for grading')    
     clouds_da = load_zarr_from_R2('optimal-stargazing-locator', "processed-data/SkyCover_Latest.zarr")['unknown']
-    # normalize the sky coverage data on a scale (0=blue skies, 1=totally cloudy)
+    # normalize the sky coverage data on a 0-1 scale (0=blue skies, 1=totally cloudy)
     clouds_da_norm = clouds_da/100.0
     # 2a. Convert longitudes from 0–360 to -180–180
     clouds_da_norm = clouds_da_norm.assign_coords(
@@ -218,7 +222,7 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
     moonlight_array = np.zeros((len(timesteps), len(coarse_lats),
                                 len(coarse_lons)), dtype=np.float32)
     
-    # calculate moon illumination over coarse grid
+    # calculate moon illumination across timesteps over coarse grid
     for i, datetime in enumerate(timesteps):
         # timestamps are in Mountain Time but are not zone aware — explicitly localize as Mountain Time
         aware_dt_mt = pd.to_datetime(datetime).tz_localize(mountain_tz)
@@ -295,7 +299,7 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
     # normalize artifificial night sky brightness from 0 to 1
     lp_da_norm = normalize_light_pollution_task(lightpollution_da, mag_thresholds, normalized_values)
 
-    # interpolate dataset, so its grid matches others
+    # interpolate dataset, so its grid matches other datasets
     lp_da_norm = lp_da_norm.squeeze()
     lp_da_norm_resamp = interpolate_light_pollution_task(lp_da_norm,
                                                     target_lat,
@@ -318,6 +322,9 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     import logging
     logging.getLogger("distributed").setLevel(logging.WARNING)
     logging.getLogger("dask").setLevel(logging.WARNING)
+
+    # Keep attributes during all operations
+    xr.set_options(keep_attrs=True)
 
     logger = logging_setup()
     logger.info('preparing meteorological and astronomical data...')
@@ -352,7 +359,7 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
                                          clouds_da['step'],
                                          clouds_da['valid_time'])
     
-    logger.info('evaluating variable effects on stargazing conditions...')
+    logger.info("evaluating each variable's effect on stargazing conditions...")
     # ensuring that datasets are aligned chunk-wise
     target_chunks = {
         'step': 3,
