@@ -1,5 +1,5 @@
 """
-A script for organizing overarching prefect flows
+A script for organizing prefect flows, subflows, and tasks
 """
 
 
@@ -427,17 +427,17 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
+    logger.info('creating GIF of latest stargazing condition grades forecast')
+    create_stargazing_gif(stargazing_ds['grade_num'],
+                          'Stargazing Conditions Grades',
+                          ['N/A','A+','A','B','C','D','F']) 
+    
     if skip_stargazing_tiles == False:
         logger.info(('generating stargazing grade tileset'))
         gen_tiles_task(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)), 
                        "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r",
                        vmin=-1, vmax=5, skip_tiles=skip_stargazing_tiles)
         
-    logger.info('creating GIF of latest stargazing condition grades forecast')
-    create_stargazing_gif(stargazing_ds['grade_num'],
-                          'Stargazing Conditions Grades',
-                          ['N/A','A+','A','B','C','D','F']) 
-
 # ----- Preprocessing Precipitation data -----
 @flow(name='precipitation-forecast-download-flow', log_prints=True)
 def precipitation_forecast_flow(skip_tiles=False):
