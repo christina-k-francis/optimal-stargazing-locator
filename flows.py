@@ -12,7 +12,7 @@ from skyfield.api import load, wgs84
 # custom fxs
 from scripts.utils.grade_tools import grade_dataset
 from scripts.utils.gif_tools import create_nws_gif, create_stargazing_gif
-from scripts.utils.tile_tools import generate_tiles_from_xr, generate_stargazing_tiles
+from scripts.utils.tile_tools import generate_tiles_from_xr
 from scripts.utils.upload_download_tools import upload_zarr_dataset, load_zarr_from_R2, load_tiff_from_R2
 from scripts.utils.logging_tools import logging_setup
 
