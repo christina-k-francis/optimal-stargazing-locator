@@ -1,7 +1,0 @@
-services:
-  - type: cron
-    name: stargazing-index-job
-    schedule: '0 5-23/6 * * *' #every 6 hours starting at 5am and ending before midnight every day of the year
-    env: python
-    buildCommand: "cd cron_job && pip install -r requirements.txt"
-    startCommand: "cd cron_job && ./run_all.sh"
