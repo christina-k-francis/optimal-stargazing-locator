@@ -18,6 +18,8 @@ import pytz
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.path import Path
+import geopandas as gpd
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 # custom fxs
@@ -194,8 +196,16 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label,
         
 def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels, 
                           cmap='gnuplot2_r', bucket_name='optimal-stargazing-locator'):
+    # prepare ConUSA shapefile for clipping
+    USA_shp = gpd.read_file('geo_ref_data/cb_2018_us_nation_5m.shp')
+    conusa_mask = (-124.8, 24.4, -66.8, 49.4)
+    conusa = gpd.clip(USA_shp, conusa_mask)
+    # turn multipolygon into a single polygon object
+    mask_geometry = conusa.geometry.union_all()
+    # create the clipping path
+    poly_path = geometry_to_path(mask_geometry)
+
     images = []
-    
     for time_step in range(len(stargazing_da.step.values)):
         stargazing_data = stargazing_da[time_step]
         lat = stargazing_data.latitude
@@ -203,8 +213,9 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
     
         fig = plt.figure(figsize=(12,6))
         ax = fig.add_subplot(1,1,1, projection=ccrs.PlateCarree())
-        plt.pcolormesh(lon, lat, stargazing_data, cmap=cmap,
-                       transform=ccrs.PlateCarree())
+        pc = plt.pcolormesh(lon, lat, stargazing_data, cmap=cmap,
+                            transform=ccrs.PlateCarree())
+        pc.set_clip_path(PathPatch(poly_path, transform=ax.transData))
         plt.clim(-1,5)
         gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False, linewidth=0.5) 
         ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) 
@@ -327,3 +338,50 @@ def create_moon_gif(moon_ds, cmap, cbar_label, data_title,
     gif_buffer.close()
     del gif_buffer
     gc.collect()
+
+def geometry_to_path(geom):
+    """Convert shapely geometry to matplotlib Path"""
+    if geom.geom_type == 'Polygon':
+        # Single polygon
+        vertices = np.array(geom.exterior.coords)
+        codes = np.ones(len(vertices), dtype=Path.code_type) * Path.LINETO
+        codes[0] = Path.MOVETO
+        codes[-1] = Path.CLOSEPOLY
+        
+        # Handle holes
+        for interior in geom.interiors:
+            hole_verts = np.array(interior.coords)
+            hole_codes = np.ones(len(hole_verts), dtype=Path.code_type) * Path.LINETO
+            hole_codes[0] = Path.MOVETO
+            hole_codes[-1] = Path.CLOSEPOLY
+            vertices = np.vstack([vertices, hole_verts])
+            codes = np.hstack([codes, hole_codes])
+        
+        return Path(vertices, codes)
+    
+    elif geom.geom_type == 'MultiPolygon':
+        # Multiple polygons - combine all into one path
+        vertices_list = []
+        codes_list = []
+        
+        for polygon in geom.geoms:
+            # Exterior
+            verts = np.array(polygon.exterior.coords)
+            codes = np.ones(len(verts), dtype=Path.code_type) * Path.LINETO
+            codes[0] = Path.MOVETO
+            codes[-1] = Path.CLOSEPOLY
+            vertices_list.append(verts)
+            codes_list.append(codes)
+            
+            # Holes
+            for interior in polygon.interiors:
+                hole_verts = np.array(interior.coords)
+                hole_codes = np.ones(len(hole_verts), dtype=Path.code_type) * Path.LINETO
+                hole_codes[0] = Path.MOVETO
+                hole_codes[-1] = Path.CLOSEPOLY
+                vertices_list.append(hole_verts)
+                codes_list.append(hole_codes)
+        
+        vertices = np.vstack(vertices_list)
+        codes = np.hstack(codes_list)
+        return Path(vertices, codes)

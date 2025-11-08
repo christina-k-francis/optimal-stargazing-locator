@@ -3,6 +3,7 @@ boto3
 cfgrib
 Cartopy==0.24.1
 dask
+geopandas
 matplotlib==3.10.3
 numpy==2.1.3
 pandas
