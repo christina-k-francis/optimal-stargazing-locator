@@ -222,6 +222,7 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
         ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) 
         ax.add_feature(cfeature.BORDERS, linestyle=':') 
         ax.coastlines(resolution='110m', zorder=3) 
+        ax.set_extent([-130, -66, 22, 52], crs=ccrs.PlateCarree())
         gl.top_labels=False
         cbar = plt.colorbar(ax=ax, 
                             orientation='vertical', 
