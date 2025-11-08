@@ -229,8 +229,7 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
                             pad=0.1,
                             label=f'{cbar_label}', 
                             extend='neither')
-        cbar.set_label(label=cbar_label, size=16, weight='bold')
-        cbar.ax.tick_params(labelsize=15)
+        cbar.set_label(label=cbar_label)
         cbar.ax.set_yticks(np.linspace(-1,5,7))
         cbar.ax.set_yticklabels(cbar_tick_labels)
         local_dt = pd.to_datetime(stargazing_data.valid_time.values).tz_localize(mountain_tz)
