@@ -28,7 +28,7 @@ jobs:
           pip install GDAL==$(gdal-config --version)
           pip install -r requirements.txt
       
-      - name: Run stargazing calculation flow
+      - name: Run stargazing gif creation flow
         env:
           PREFECT_API_URL: ${{ secrets.PREFECT_API_URL }}
           PREFECT_API_KEY: ${{ secrets.PREFECT_API_KEY }}
