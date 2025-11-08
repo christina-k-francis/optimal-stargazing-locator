@@ -440,19 +440,19 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
         
 # ----- Preprocessing Precipitation data -----
 @flow(name='precipitation-forecast-download-flow', log_prints=True)
-def precipitation_forecast_flow(skip_tiles=False):
+def precipitation_forecast_flow(colormap="plasma_r", skip_tiles=False):
     logger = logging_setup()
     logger.info('Flow: Retrieving Precipitation Data')
     ds = download_precip_task()
     logger.info('downloaded latest forecast')
-    gif_boolean = create_gif_task(ds, "ocean_r", "Precipitation Probability (%)", 
+    gif_boolean = create_gif_task(ds, colormap, "Precipitation Probability (%)", 
                                   "Precipitation Probability")
     if not gif_boolean:
         logger.error('GIF Creation Failed')
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "precip_probability", 
                                   "data-layer-tiles/PrecipProb_Tiles",
-                                  0.01, "ocean_r", vmin=0, vmax=100, 
+                                  0.01, colormap, vmin=0, vmax=100, 
                                   skip_tiles=skip_tiles)
     if not tile_boolean:
         logger.error('Tileset generation failed')
@@ -460,19 +460,19 @@ def precipitation_forecast_flow(skip_tiles=False):
     
 # ----- Preprocessing Cloud Cover data -----
 @flow(name='cloud-cover-forecast-download-flow', log_prints=True)
-def cloud_cover_forecast_flow(skip_tiles=False):
+def cloud_cover_forecast_flow(colormap="YlGnBu_r", skip_tiles=False):
     logger = logging_setup()
     logger.info('Flow: Retrieving Cloud Cover Data')
     ds = download_sky_task()
     logger.info('downloaded latest forecast')
-    gif_boolean = create_gif_task(ds, "bone", "Sky Covered by Clouds (%)", 
+    gif_boolean = create_gif_task(ds, colormap, "Sky Covered by Clouds (%)", 
                                   "Cloud Coverage")
     if not gif_boolean:
         logger.error('GIF Creation Failed')
     logger.info('GIF saved to cloud')
     tile_boolean = gen_tiles_task(ds, "cloud_coverage", 
                                   "data-layer-tiles/SkyCover_Tiles",
-                                  0.05, "bone", vmin=0, vmax=100,
+                                  0.05, colormap, vmin=0, vmax=100,
                                   skip_tiles=skip_tiles)
     if not tile_boolean:
         logger.error('Tileset generation failed')
