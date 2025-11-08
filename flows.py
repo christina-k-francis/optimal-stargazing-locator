@@ -6,8 +6,8 @@ A script for organizing prefect flows, subflows, and tasks
 import xarray as xr
 import numpy as np
 import pandas as pd
-from prefect import flow, task
 import pytz
+from prefect import flow, task
 from skyfield.api import load, wgs84
 # custom fxs
 from scripts.utils.grade_tools import grade_dataset
@@ -219,7 +219,7 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
     mountain_tz = pytz.timezone("US/Mountain")
     # coarse grid definition
     coarse_lats = np.linspace(24, 50, 25)  # ~1 degree resolution
-    coarse_lons = np.linspace(-125, -66, 30)
+    coarse_lons = np.linspace(-124, -67, 30)
     # initialize output array
     moonlight_array = np.zeros((len(timesteps), len(coarse_lats),
                                 len(coarse_lons)), dtype=np.float32)
@@ -477,3 +477,15 @@ def cloud_cover_forecast_flow(colormap="YlGnBu_r", skip_tiles=False):
     if not tile_boolean:
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Cloud Cover Complete!')
+
+# ----- Stargazing Grade Plot Creation Flow (Testing) -----
+@flow(name='stargazing-grade-gif-test-flow', log_prints=True)
+def test_stargazing_gif_flow():
+    logger = logging_setup()
+    # import the stargazing grade data array
+    stargazing_ds = load_zarr_from_R2('optimal-stargazing-locator', "processed-data/Stargazing_Dataset_Latest.zarr")
+
+    create_stargazing_gif(stargazing_ds['grade_num'],
+                          'Stargazing Conditions Grades',
+                          ['N/A','A+','A','B','C','D','F']) 
+    logger.info('Done!')
