@@ -19,6 +19,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
+from matplotlib.patches import PathPatch
 import geopandas as gpd
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
