@@ -197,7 +197,7 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label,
 def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels, 
                           cmap='gnuplot2_r', bucket_name='optimal-stargazing-locator'):
     # prepare ConUSA shapefile for clipping
-    USA_shp = gpd.read_file('geo_ref_data/cb_2018_us_nation_5m.shp')
+    USA_shp = gpd.read_file('scripts/utils/geo_ref_data/cb_2018_us_nation_5m.shp')
     conusa_mask = (-124.8, 24.4, -66.8, 49.4)
     conusa = gpd.clip(USA_shp, conusa_mask)
     # turn multipolygon into a single polygon object
