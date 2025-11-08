@@ -190,7 +190,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             vmax = float(np.nanmax(data))
 
         # defining RGB colormap
-        norm = Normalize(vmin=float(np.nanmin(data)), vmax=float(np.nanmax(data)))
+        norm = Normalize(vmin=vmin, vmax=vmax)
         colormap = plt.colormaps[cmap]
         rgba_img = (colormap(norm(data)) * 255).astype("uint8")
         rgb_img = rgba_img[:, :, :3]  # Drop alpha
