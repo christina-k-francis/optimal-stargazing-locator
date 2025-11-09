@@ -440,7 +440,7 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
         
 # ----- Preprocessing Precipitation data -----
 @flow(name='precipitation-forecast-download-flow', log_prints=True)
-def precipitation_forecast_flow(colormap="plasma_r", skip_tiles=False):
+def precipitation_forecast_flow(colormap="PuBuGn", skip_tiles=False):
     logger = logging_setup()
     logger.info('Flow: Retrieving Precipitation Data')
     ds = download_precip_task()
