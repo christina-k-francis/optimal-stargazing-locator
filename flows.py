@@ -460,7 +460,7 @@ def precipitation_forecast_flow(colormap="PuBuGn", skip_tiles=False):
     
 # ----- Preprocessing Cloud Cover data -----
 @flow(name='cloud-cover-forecast-download-flow', log_prints=True)
-def cloud_cover_forecast_flow(colormap="YlGnBu_r", skip_tiles=False):
+def cloud_cover_forecast_flow(colormap="YlGnBu", skip_tiles=False):
     logger = logging_setup()
     logger.info('Flow: Retrieving Cloud Cover Data')
     ds = download_sky_task()
