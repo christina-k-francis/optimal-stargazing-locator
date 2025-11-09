@@ -53,7 +53,7 @@ fs = s3fs.S3FileSystem(
 
 BUCKET = "optimal-stargazing-locator"
 
-# Mapping for Paths in Bucket
+# Mapping to Files in Bucket on Cloud
 LAYER_PATHS = {
     "SkyCover_Tiles": "data-layer-tiles/SkyCover_Tiles",
     "PrecipProb_Tiles": "data-layer-tiles/PrecipProb_Tiles",
@@ -67,13 +67,19 @@ LEGEND_PATHS = {
         "Temp_Light.png": "plots/Temp_Legend_Light.png",
         "Stargazing_Dark.png": "plots/Stargazing_Legend_Dark.png",
         "Stargazing_Light.png": "plots/Stargazing_Legend_Light.png",
-        "SkyCover_Dark.png": "plots/SkyCover_Legend_Dark.png",
-        "SkyCover_Light.png": "plots/SkyCover_Legend_Light.png",
+        "SkyCover_Dark.png": "plots/CloudCover_Legend_Dark.png",
+        "SkyCover_Light.png": "plots/CloudCover_Legend_Light.png",
         "PrecipProb_Dark.png": "plots/PrecipProb_Legend_Dark.png",
         "PrecipProb_Light.png": "plots/PrecipProb_Legend_Light.png",
         "LightPollution_Dark.png": "plots/LightPollution_Legend_Dark.png",
         "LightPollution_Light.png": "plots/LightPollution_Legend_Light.png"
     }
+
+GIF_PATHS = {
+    "Stargazing_Latest.gif": "plots/Stargazing_Dataset_Latest.gif",
+    "PrecipProb_Latest.gif": "plots/Precipitation Probability_Latest.gif",
+    "CloudCover_Latest.gif": "plots/Cloud Coverage_Latest.gif"
+}
 
 # blank tile configuration
 blank_tile_key = "data-layer-tiles/blank_tile_256x256.png"
@@ -210,7 +216,9 @@ async def head_legend(filename: str):
 # GIF plots   
 @app.get("/plots/{filename}")
 async def get_plot_gif(filename: str):
-    key = f"plots/{filename}"
+    key = GIF_PATHS.get(filename)
+    if not key:
+        return Response(status_code=404, media_type="application/json", content='{"error":"GIF not found"}')
     try:
         with fs.open(s3key(key), "rb") as f:
             data = f.read()
@@ -222,7 +230,7 @@ async def get_plot_gif(filename: str):
 
 @app.head("/plots/{filename}")
 async def head_plot_gif(filename: str):
-    key = f"plots/{filename}"
+    key = GIF_PATHS.get(filename)
     try:
         return Response(status_code=200) if fs.exists(s3key(key)) else Response(status_code=404)
     except Exception:
