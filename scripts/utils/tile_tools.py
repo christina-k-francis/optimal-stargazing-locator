@@ -21,6 +21,7 @@ import pathlib
 # organization
 import gc
 # raster visualization
+import geopandas as gpd
 import rasterio
 from rasterio.enums import ColorInterp
 import matplotlib.pyplot as plt
@@ -126,7 +127,8 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
 
 @task(log_prints=True, retries=3)
 def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx, 
-                                   sleep_secs, cmap, vmin=None, vmax=None):
+                                   sleep_secs, cmap, vmin=None, vmax=None,
+                                   conus_shapefile='scripts/utils/geo_ref_data/cb_2018_us_nation_5m.shp'):
     """
     description:
         Generate tiles for a single timestep
@@ -180,6 +182,16 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         # Reproject into Web Mercator
         slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
+        # Apply CONUS mask to tile data
+        USA_gdf = gpd.read_file(conus_shapefile)
+        # prepare shapefile - clipping to conus
+        conusa_mask = (-124.8, 24.4, -66.8, 49.4)
+        conus_gdf = gpd.clip(USA_gdf, conusa_mask)
+        conus_gdf = conus_gdf.to_crs("EPSG:3857")
+            
+        # Clip ds to CONUS boundary
+        slice_2d = slice_2d.rio.clip(conus_gdf.geometry, all_touched=True)
+
         # Apply colormap and save as RGB GeoTIFF
         data = slice_2d.values
 
@@ -189,33 +201,37 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         if vmax is None:
             vmax = float(np.nanmax(data))
 
+        # Create mask 
+        valid_mask = ~np.isnan(data)
+
         # defining RGB colormap
         norm = Normalize(vmin=vmin, vmax=vmax)
         colormap = plt.colormaps[cmap]
         rgba_img = (colormap(norm(data)) * 255).astype("uint8")
-        rgb_img = rgba_img[:, :, :3]  # Drop alpha
+        rgba_img[:, :, 3] = np.where(valid_mask, 255, 0)
 
-        # create/write RGB GeoTIFF
+        # create/write RGBA GeoTIFF
         with rasterio.open(
             geo_path,
             "w",
             driver="GTiff",
-            height=rgb_img.shape[0],
-            width=rgb_img.shape[1],
-            count=3,
-            dtype=rgb_img.dtype,
+            height=rgba_img.shape[0],
+            width=rgba_img.shape[1],
+            count=4,
+            dtype=rgba_img.dtype,
             crs="EPSG:3857",
             transform=slice_2d.rio.transform()
         ) as dst:
-            for band in range(3):
-                dst.write(rgb_img[:, :, band], band + 1)
+            for band in range(4):
+                dst.write(rgba_img[:, :, band], band + 1)
             # set color interpretation in metadata
             dst.colorinterp = (ColorInterp.red,
                                ColorInterp.green,
-                               ColorInterp.blue)
+                               ColorInterp.blue,
+                               ColorInterp.alpha)
             
         
-        # Generate tiles from RGB GeoTIFF
+        # Generate tiles from RGBA GeoTIFF
         try:
             subprocess.run([
                 "gdal2tiles.py",
