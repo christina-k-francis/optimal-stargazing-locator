@@ -478,6 +478,8 @@ def cloud_cover_forecast_flow(colormap="YlGnBu", skip_tiles=False):
         logger.error('Tileset generation failed')
     logger.info('Preprocessing Cloud Cover Complete!')
 
+
+
 # ----- Stargazing Grade Plot Creation Flow (Testing) -----
 @flow(name='stargazing-grade-gif-test-flow', log_prints=True)
 def test_stargazing_gif_flow():
@@ -489,3 +491,155 @@ def test_stargazing_gif_flow():
                           'Stargazing Conditions Grades',
                           ['N/A','A+','A','B','C','D','F']) 
     logger.info('Done!')
+
+# ----- Simplified version of the Stargazing Grade Calculation Flow -----
+@flow(name="simplified-stargazing-calc-flow", log_prints=True)
+def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
+    """
+    This is a cohesive and simplified version of the Stargazing Grade Calculation flow, wherein:
+    - The latest precipitation and cloud cover are downloaded from the NWS
+    - All pertinent meteorological and astronomical datasets are prepared for stargazing evaluations
+    - Stargazing Grades are calculated at the spatiotemporal level
+    - Tiles and GIFs are created for the Stargazing Grade dataset
+    """
+    # suppress Dask task logging
+    import logging
+    logging.getLogger("distributed").setLevel(logging.WARNING)
+    logging.getLogger("dask").setLevel(logging.WARNING)
+
+    # Keep attributes during all operations
+    xr.set_options(keep_attrs=True)
+
+    logger = logging_setup()
+    
+    logger.info('Flow: Retrieving Precipitation Data')
+    precip_da = download_precip_task()
+    
+    logger.info('Preparing precip data for grade calculations')
+    # normalize the precipitation data on a scale (0=no rain, 1=100% Showers)
+    precip_da_norm = precip_da / 100.0
+    precip_da_norm = precip_da_norm.assign_coords(
+        longitude=((precip_da_norm.longitude + 180) % 360) - 180)
+    # Make lat/lon dimensions 1D instead of 2D
+    precip_da = precip_da_norm.assign_coords(
+            latitude=("y", precip_da_norm.latitude[:, 0].data),
+            longitude=("x", precip_da_norm.longitude[0, :].data))
+    
+    logger.info('Flow: Retrieving Cloud Cover Data')
+    clouds_da = download_sky_task()
+    
+    logger.info('Preparing cloud cover data for grade calculations')
+    # normalize the sky coverage data on a 0-1 scale (0=blue skies, 1=totally cloudy)
+    clouds_da_norm = clouds_da/100.0
+    # 2a. Convert longitudes from 0–360 to -180–180
+    clouds_da_norm = clouds_da_norm.assign_coords(
+        longitude=((clouds_da_norm.longitude + 180) % 360) - 180)
+    # make lat/lon dimensions 1D instead of 2D
+    clouds_da = clouds_da_norm.assign_coords(
+            latitude=("y", clouds_da_norm.latitude[:, 0].data),
+            longitude=("x", clouds_da_norm.longitude[0, :].data))
+
+    logger.info('preparing lunar and light pollution data...')
+    # ensuring that NWS datasets cover the same forecast datetimes
+    precip_da = precip_da[np.isin(precip_da['valid_time'].values,
+                                             clouds_da['valid_time'].values)]
+    clouds_da = clouds_da[np.isin(clouds_da['valid_time'].values,
+                                                 precip_da['valid_time'].values)]
+    # we have to recalculate the 'step' dim since we have a new forecast start datetime
+    reference_time = clouds_da['valid_time'].values[0]
+    # recalculate step for clouds
+    clouds_steps = [np.timedelta64(t - reference_time) 
+                    for t in clouds_da['valid_time'].values]
+    clouds_da = clouds_da.assign_coords({'step': clouds_steps})
+    # recalculate step for precip
+    precip_steps = [np.timedelta64(t - reference_time) 
+                    for t in precip_da['valid_time'].values]
+    precip_da = precip_da.assign_coords({'step': precip_steps})
+   
+    moon_da = moon_data_prep_subflow(clouds_da["valid_time"].values, 
+                                     clouds_da['step'].data,
+                                     clouds_da.latitude, 
+                                     clouds_da.longitude)
+    lp_da = light_pollution_prep_subflow("optimal-stargazing-locator",
+                                         clouds_da.latitude, 
+                                         clouds_da.longitude,
+                                         clouds_da.sizes['step'],
+                                         clouds_da['step'],
+                                         clouds_da['valid_time'])
+    
+    logger.info("evaluating each variable's effect on stargazing conditions...")
+    # ensuring that datasets are aligned chunk-wise
+    target_chunks = {
+        'step': 3,
+        'y': 459,  # 1377 ≈ 459 * 3
+        'x': 715   # 2145 ≈ 715 * 3
+    }
+    
+    clouds_da = clouds_da.chunk(target_chunks)
+    precip_da = precip_da.chunk(target_chunks)
+    lp_da = lp_da.chunk(target_chunks)
+    moon_da = moon_da.chunk(target_chunks)
+
+    # calculating letter grades for each variable
+    clouds_grades = grade_dataset(clouds_da, 'clouds')
+    precip_grades = grade_dataset(precip_da, 'precip')
+    lp_grades = grade_dataset(lp_da, 'lp')
+    moon_grades = grade_dataset(moon_da, 'moon')
+
+    logger.info('calculating spatiotemporal stargazing grades')
+    # variable weights
+    w_precip = 0.4
+    w_cloud = 0.75
+    w_lp = 1
+    w_moon = 0.2
+
+    stargazing_grades = grade_stargazing(clouds_grades, precip_grades, 
+                                         lp_grades, moon_grades,
+                                         w_cloud, w_precip, w_lp, w_moon)
+
+    grade_legend = {
+        -1: "NA",
+         0: "A+",
+         1: "A",
+         2: "B",
+         3: "C",
+         4: "D",
+         5: "F"
+    }
+
+    # merge into final dataset
+    stargazing_ds = xr.merge([
+        stargazing_grades.rename("grade_num"),
+        precip_grades.rename("grade_precip"),
+        clouds_grades.rename("grade_cloud"),
+        lp_grades.rename("grade_lightpollution"),
+        moon_grades.rename("grade_moon")
+    ], combine_attrs='drop_conflicts', compat='override')
+
+    # attach metadata
+    stargazing_ds.attrs["legend"] = grade_legend
+    stargazing_ds.attrs["description"] = "Weighted average grading of stargazing conditions"
+
+    # mitigating sources for error 
+    for var in stargazing_ds.data_vars:
+        # ensure proper numeric dtype
+        stargazing_ds[var] = stargazing_ds[var].astype('int8')  
+        # remove old encoding->new metadata infers current state
+        stargazing_ds[var].encoding.clear()
+    # ensuring chunk alignment
+    stargazing_ds = stargazing_ds.chunk(target_chunks)
+
+
+    logger.info("uploading stargazing evaluation dataset to cloud...")
+    upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
+
+    logger.info('creating GIF of latest stargazing condition grades forecast')
+    create_stargazing_gif(stargazing_ds['grade_num'],
+                          'Stargazing Conditions Grades',
+                          ['N/A','A+','A','B','C','D','F']) 
+    
+    if skip_stargazing_tiles == False:
+        logger.info(('generating stargazing grade tileset'))
+        gen_tiles_task(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)), 
+                       "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r",
+                       vmin=-1, vmax=5, skip_tiles=skip_stargazing_tiles)
