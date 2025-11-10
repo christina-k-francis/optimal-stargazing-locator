@@ -361,6 +361,8 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
     lightpollution_3d = lightpollution_3d.assign_coords(
         step=steps,
         valid_time=valid_time)
+
+    upload_zarr_dataset(lightpollution_3d, "processed-data/LightPollution_Dataset_Latest.zarr")
     
     return lightpollution_3d
 
