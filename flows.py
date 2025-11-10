@@ -331,10 +331,33 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
     lp_da_norm_resamp = interpolate_light_pollution_task(lp_da_norm,
                                                     target_lat,
                                                     target_lon)
+
+    logger.info('Clipping light pollution data to ConUSA boundary...')
+    # let's clip this data array, so the data only covers the continental United States
+    USA_shp = gpd.read_file('scripts/utils/geo_ref_data/cb_2018_us_nation_5m.shp')
+    conusa_mask = (-124.8, 24.4, -66.8, 49.4)
+    conusa = gpd.clip(USA_shp, conusa_mask)
+    # Ensure shapefile is in crs WGS84 (EPSG:4326)
+    conusa = conusa.to_crs("EPSG:4326")
+    # Get the unioned geometry (single shape covering all CONUS)
+    conus_boundary = conusa.geometry.union_all()
+    # Assign CRS if not present
+    if lp_da_norm_resamp.rio.crs is None:
+        lp_da_norm_resamp.rio.write_crs("EPSG:4326", inplace=True)
+    # Create coordinate meshgrids
+    lons, lats = np.meshgrid(lp_da_norm_resamp.longitude.values, lp_da_norm_resamp.latitude.values)
+    # Create mask by checking if each point is inside CONUS
+    mask = np.zeros(lons.shape, dtype=bool)
+    # Use vectorized contains for efficiency
+    mask = shapely.contains_xy(conus_boundary, lons.ravel(), lats.ravel()).reshape(lons.shape)
+    # Apply mask to data array
+    clipped_lp_norm_da = lp_da_norm_resamp.copy()
+    # Set values outside CONUS to NaN
+    clipped_lp_norm_da = clipped_lp_norm_da.where(mask)    
     
     # stack 2D LP array across a new "step" dimension
     lightpollution_3d = xr.concat(
-        [lp_da_norm_resamp] * step_size, dim='step')
+        [clipped_lp_norm_da] * step_size, dim='step')
     lightpollution_3d = lightpollution_3d.assign_coords(
         step=steps,
         valid_time=valid_time)
