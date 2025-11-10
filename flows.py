@@ -7,6 +7,8 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 import pytz
+import geopandas as gpd
+import shapely
 from prefect import flow, task
 from skyfield.api import load, wgs84
 # custom fxs
@@ -219,7 +221,7 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
     mountain_tz = pytz.timezone("US/Mountain")
     # coarse grid definition
     coarse_lats = np.linspace(24, 50, 25)  # ~1 degree resolution
-    coarse_lons = np.linspace(-124, -67, 30)
+    coarse_lons = np.linspace(-126, -67, 30)
     # initialize output array
     moonlight_array = np.zeros((len(timesteps), len(coarse_lats),
                                 len(coarse_lons)), dtype=np.float32)
@@ -267,9 +269,32 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
         method="linear"
     )
 
-    upload_zarr_dataset(moonlight_da, "processed-data/Moon_Dataset_Latest.zarr")
+    logger.info('Clipping Moon data to ConUSA boundary...')
+    # let's clip this data array, so the data only covers the continental United States
+    USA_shp = gpd.read_file('scripts/utils/geo_ref_data/cb_2018_us_nation_5m.shp')
+    conusa_mask = (-124.8, 24.4, -66.8, 49.4)
+    conusa = gpd.clip(USA_shp, conusa_mask)
+    # Ensure shapefile is in crs WGS84 (EPSG:4326)
+    conusa = conusa.to_crs("EPSG:4326")
+    # Get the unioned geometry (single shape covering all CONUS)
+    conus_boundary = conusa.geometry.union_all()
+    # Assign CRS if not present
+    if moonlight_da.rio.crs is None:
+        moonlight_da.rio.write_crs("EPSG:4326", inplace=True)
+    # Create coordinate meshgrids
+    lons, lats = np.meshgrid(moonlight_da.longitude.values, moonlight_da.latitude.values)
+    # Create mask by checking if each point is inside CONUS
+    mask = np.zeros(lons.shape, dtype=bool)
+    # Use vectorized contains for efficiency
+    mask = shapely.contains_xy(conus_boundary, lons.ravel(), lats.ravel()).reshape(lons.shape)
+    # Apply mask to data array
+    clipped_moon_da = moonlight_da.copy()
+    # Set values outside CONUS to NaN
+    clipped_moon_da = clipped_moon_da.where(mask)
+
+    upload_zarr_dataset(clipped_moon_da, "processed-data/Moon_Dataset_Latest.zarr")
     logger.info('Done!')
-    return moonlight_da
+    return clipped_moon_da
     
 # preparing light pollution data for grade calculation
 @flow(name='light-pollution-prep-subflow', log_prints=True)
