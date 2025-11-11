@@ -221,7 +221,7 @@ def moon_data_prep_subflow(timesteps, steps, target_lat, target_lon):
     mountain_tz = pytz.timezone("US/Mountain")
     # coarse grid definition
     coarse_lats = np.linspace(24, 50, 25)  # ~1 degree resolution
-    coarse_lons = np.linspace(-126, -67, 30)
+    coarse_lons = np.linspace(-126, -66, 30)
     # initialize output array
     moonlight_array = np.zeros((len(timesteps), len(coarse_lats),
                                 len(coarse_lons)), dtype=np.float32)
@@ -317,7 +317,7 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
     lightpollution_da.load()
     # define coordinate system, clip to United States, assign lat and lon xr coords
     lightpollution_da.rio.write_crs("EPSG:3857", inplace=True)
-    lightpollution_da = lightpollution_da.rio.clip_box(minx=-126, miny=24, maxx=-68, maxy=50)
+    lightpollution_da = lightpollution_da.rio.clip_box(minx=-125, miny=24, maxx=-66, maxy=50)
     lightpollution_da = lightpollution_da.rename({'x': 'longitude', 'y': 'latitude'})
 
     # calculate light pollution thresholds for normalization
