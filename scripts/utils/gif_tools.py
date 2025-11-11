@@ -222,18 +222,19 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
         ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) 
         ax.add_feature(cfeature.BORDERS, linestyle=':') 
         ax.coastlines(resolution='110m', zorder=3) 
-        ax.set_extent([-130, -66, 22, 52], crs=ccrs.PlateCarree())
+        ax.set_extent([-125, -66, 22, 52], crs=ccrs.PlateCarree())
         gl.top_labels=False
         cbar = plt.colorbar(ax=ax, 
                             orientation='vertical', 
-                            pad=0.1,
+                            pad=0.05,
                             label=f'{cbar_label}', 
-                            extend='neither')
+                            extend='neither',
+                            shrink=0.8)
         cbar.set_label(label=cbar_label)
         cbar.ax.set_yticks(np.linspace(-1,5,7))
         cbar.ax.set_yticklabels(cbar_tick_labels)
         local_dt = pd.to_datetime(stargazing_data.valid_time.values).tz_localize(mountain_tz)
-        ax.set_title(f"Stargazing Grades on {local_dt.strftime('%Y-%m-%d %H:%M MT')}")
+        ax.set_title(f"Stargazing Grades on {local_dt.strftime('%Y-%m-%d %H:%M UTC')}")
         
         img = fig2img(fig)
         images.append(img)
@@ -246,7 +247,7 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
                    format='GIF', 
                    save_all=True,
                    append_images=images[1:], 
-                   duration=350, 
+                   duration=700, 
                    loop=0)
     gif_buffer.seek(0)
 
