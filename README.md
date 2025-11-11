@@ -9,8 +9,7 @@ A web application that allows users to see a 6-day forecast of stargazing condit
 1. Open the Optimal Stargazing Locator web application
 2. Enter your location in the search bar or use the Selector Hand Tool to click on any location on the map
 3. View the Stargazing Conditions grade (A-F) for tonight and upcoming days in that region
-4. Explore interactive light pollution, precipitation, and cloud cover map layers
-5. Plan your stargazing trip accordingly!
+4. Plan your stargazing trip accordingly!
 
 ## Feedback
 
@@ -27,7 +26,8 @@ If you have any questions, recommendations for improvements, or bugs to report, 
 
 ## Future Plans
 
-* Provide viewable GIFs of the forecast for each dataset
+* Add map layers for light pollution, precipitation, and cloud cover data
+* Provide viewable GIFs of forecasts
 * Incorporate a direction-aware warning for proximity to an urban light dome 
 * Improve the mobile experience
 * Expand the stargazing grade forecast coverage area
