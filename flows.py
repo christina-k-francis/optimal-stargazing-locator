@@ -368,8 +368,8 @@ def light_pollution_prep_subflow(bucket_name, target_lat, target_lon,
 
 # ----- FLOWS ----------------------------------------------------------------#
 # ----- Stargazing Grade Calculation Flow -----
-@flow(name="main-stargazing-calc-flow", log_prints=True)
-def main_stargazing_calc_flow(skip_stargazing_tiles=False):
+@flow(name="stargazing-grade-calc-flow", log_prints=True)
+def stargazing_grade_calc_flow(skip_stargazing_tiles=False):
     # suppress Dask task logging
     import logging
     logging.getLogger("distributed").setLevel(logging.WARNING)
@@ -550,7 +550,7 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     - The latest precipitation and cloud cover are downloaded from the NWS
     - All pertinent meteorological and astronomical datasets are prepared for stargazing evaluations
     - Stargazing Grades are calculated at the spatiotemporal level
-    - Tiles and GIFs are created for the Stargazing Grade dataset
+    - Tiles and GIFs are created for the Stargazing Grade dataset ONLY
     """
     # suppress Dask task logging
     import logging
@@ -693,3 +693,7 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
         gen_tiles_task(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)), 
                        "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r",
                        vmin=-1, vmax=5, skip_tiles=skip_stargazing_tiles)
+
+# for script execution
+if __name__ == "__main__":
+    simplified_stargazing_calc_flow()

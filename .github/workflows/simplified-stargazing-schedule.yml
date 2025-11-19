@@ -1,4 +1,8 @@
-name: Simplified Stargazing Forecast Execution Schedule
+name: Simplified Stargazing Locator Execution Schedule
+# This script entails:
+# 1. Downloading the latest Cloud Cover and Precipitation NWS datasets
+# 2. Prepping relevant datasets for grade calculation (clouds, precip, light pollution, and lunar)
+# 3. Calculating Stargazing Grades, and generating its forecast GIF and Tileset
 
 on:
   schedule:

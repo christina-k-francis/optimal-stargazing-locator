@@ -1,4 +1,9 @@
-name: Stargazing Forecast Execution Schedule
+name: Main Stargazing Locator Execution Schedule
+# This script entails:
+# 1. Downloading the latest Cloud Cover NWS dataset, and generating its forecast GIF and Tileset
+# 2. Downloading the latest Precipitation NWS dataset, and generating its forecast GIF and Tileset
+# 3. Prepping relevant datasets for grade calculation (clouds, precip, light pollution, and lunar)
+# 4. Calculating Stargazing Grades, and generating its forecast GIF and Tileset
 
 on:
   schedule:
@@ -104,6 +109,6 @@ jobs:
           R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
           R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
         run: |
-          python -c "from flows import main_stargazing_calc_flow; main_stargazing_calc_flow(skip_stargazing_tiles=False)"
+          python -c "from flows import stargazing_grade_calc_flow; stargazing_grade_calc_flow(skip_stargazing_tiles=False)"
 
  
