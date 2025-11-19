@@ -9,7 +9,6 @@ from prefect import task
 # tile generation
 import affine
 import subprocess
-from osgeo_utils import gdal2tiles
 from concurrent.futures import ThreadPoolExecutor, as_completed
 # cloud connection
 import os
@@ -25,6 +24,7 @@ import geopandas as gpd
 import rasterio
 from rasterio.enums import ColorInterp
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize
 # custom fxs
 from scripts.utils.logging_tools import logging_setup, log_memory_usage
@@ -80,7 +80,7 @@ def upload_tile_to_r2(tile_output_dir, R2_prefix, timestamp_str, sleep_secs):
 
 @task(log_prints=True, retries=3)
 def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs, 
-                           colormap_name="viridis", vmin=None, vmax=None):
+                           colormap_name, vmin=None, vmax=None):
     """
     description:
         Converts an xarray data array to colored raster tiles per timestep in parallel.
@@ -98,14 +98,14 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     logger.info(f"Generating tiles for {layer_name} with colormap: {colormap_name}")
 
     num_steps = ds.sizes['step']
-
+    
     # Process timesteps in parallel
     with ThreadPoolExecutor(max_workers=4) as executor:
         # Submit all timesteps
         futures = {executor.submit(
             generate_single_timestep_tiles,
             ds, layer_name, R2_prefix, i, sleep_secs, 
-            colormap_name, vmin, vmax
+            cmap=colormap_name, vmin=vmin, vmax=vmax
                 ): i for i in range(num_steps)
             }
         
@@ -147,6 +147,21 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
     # Extract data for this timestep
     slice_2d = ds.isel(step=timestep_idx)
+    # change -1 values to NaN
+    slice_2d = slice_2d.where(slice_2d != -1, np.nan)
+
+    # Extract unique y/x values from 2D arrays
+    y_vals = slice_2d.latitude[:, 0].values  # First column
+    x_vals = slice_2d.longitude[0, :].values  # First row
+    
+    # Reassign as 1D
+    slice_2d = slice_2d.assign_coords({
+        'y': y_vals,
+        'x': x_vals
+    })
+
+    # Then drop 2D coords
+    slice_2d = slice_2d.drop_vars(['latitude', 'longitude'])
 
     # Handle potential timedelta overflow
     slice_2d = _fix_timedelta_overflow(slice_2d)
@@ -157,21 +172,24 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
         # Extract transform based on attributes and GRIB metadata
-        dx = slice_2d.attrs["GRIB_DxInMetres"]
-        dy = slice_2d.attrs["GRIB_DyInMetres"]
-        minx = -2764474.3507319926
-        maxy = 3232111.7107923944
-        transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
+        if slice_2d.rio.crs is None or slice_2d.rio.transform() is None:
+            logger.error(f"Missing CRS or transform at timestep {timestep_idx}")
+            # Extract from attributes as fallback
+            dx = slice_2d.attrs["GRIB_DxInMetres"]
+            dy = slice_2d.attrs["GRIB_DyInMetres"]
+            minx = -2764474.3507319926
+            maxy = 3232111.7107923944
+            transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
 
-        # Define CONUS Lambert Conformal Conic projection (from NDFD)
-        ndfd_proj4 = (
-            "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
-            "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
-        )
+            # Define CONUS Lambert Conformal Conic projection (from NDFD)
+            ndfd_proj4 = (
+                "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
+                "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
+            )
 
-        # Assign transform and appropriate CRS
-        slice_2d.rio.write_transform(transform, inplace=True)
-        slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+            # Assign appropriate transform and CRS info.
+            slice_2d.rio.write_transform(transform, inplace=True)
+            slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
 
         # ensure y-axis is in the correct order
         if "y" in slice_2d.dims:
@@ -182,31 +200,47 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         # Reproject into Web Mercator
         slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
-        # Apply CONUS mask to tile data
-        USA_gdf = gpd.read_file(conus_shapefile)
-        # prepare shapefile - clipping to conus
-        conusa_mask = (-124.8, 24.4, -66.8, 49.4)
-        conus_gdf = gpd.clip(USA_gdf, conusa_mask)
-        conus_gdf = conus_gdf.to_crs("EPSG:3857")
-            
-        # Clip ds to CONUS boundary
-        slice_2d = slice_2d.rio.clip(conus_gdf.geometry, all_touched=True)
+        # Verify data isn't all NaN after reprojection
+        if np.all(np.isnan(slice_2d.values)):
+            logger.error(f"All NaN values after reprojection at timestep {timestep_idx}")
+            raise ValueError("Reprojection resulted in all NaN values")
 
         # Apply colormap and save as RGB GeoTIFF
         data = slice_2d.values
 
-        # Use provided vmin/vmax or calculate from data
+        # define min+max values in the dataset
         if vmin is None:
             vmin = float(np.nanmin(data))
         if vmax is None:
             vmax = float(np.nanmax(data))
 
+        # Verify we have valid data
+        if np.isnan(vmin) or np.isnan(vmax):
+            logger.error(f"Invalid data range at timestep {timestep_idx}: vmin={vmin}, vmax={vmax}")
+            raise ValueError("No valid data to render")
+        
         # Create mask 
         valid_mask = ~np.isnan(data)
 
-        # defining RGB colormap
+        # Check if we have any valid pixels
+        if not np.any(valid_mask):
+            logger.error(f"No valid pixels at timestep {timestep_idx}")
+            raise ValueError("No valid pixels to render")
+
+        # defining the RGB value range
         norm = Normalize(vmin=vmin, vmax=vmax)
-        colormap = plt.colormaps[cmap]
+        
+        # defining the colormap
+        if cmap is None:
+            # custom colormap for stargazing grades
+            colors1 = plt.cm.inferno(np.linspace(0., 1, 128))[30:85,:]
+            colors2 = plt.cm.YlOrRd_r(np.linspace(0., 1, 96))[38:70,:]
+            colors3 = plt.cm.terrain_r(np.linspace(0., 1, 128))[57:118,:]
+            colors = np.vstack((colors1, colors2, colors3))
+            colormap = mcolors.LinearSegmentedColormap.from_list('stargazing_colormap', colors, N=75).reversed()
+        else:
+            colormap = plt.colormaps[cmap]
+        # assigning cmap to RGBA values
         rgba_img = (colormap(norm(data)) * 255).astype("uint8")
         rgba_img[:, :, 3] = np.where(valid_mask, 255, 0)
 
@@ -235,6 +269,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         try:
             subprocess.run([
                 "gdal2tiles.py",
+                "-a", "0,0,0,0", # Set transparent pixels via alpha
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
