@@ -86,9 +86,9 @@ def calc_LP_thresholds_task():
     mag_thresholds.reverse() # flip values in place, so increasing
     normalized_values = [
         1.0,   # pristine night sky
-        0.85,  # limited astronomy
-        0.6,   # winter MilkyWay gone
-        0.4,   # summer MilkyWay gone
+        0.75,  # limited astronomy
+        0.5,   # winter MilkyWay gone
+        0.3,   # summer MilkyWay gone
         0.1,   # artificial twilight
         0.0    # fully urban
      ]
@@ -105,8 +105,8 @@ def normalize_light_pollution_task(lp_data, mag_thresholds, norm_values):
         kwargs={
             'xp': mag_thresholds,
             'fp': norm_values,
-            'left': 1.0,
-            'right': 0.0
+            'left': 0.0,
+            'right': 1.0
         },
         dask='parallelized',
         vectorize=True,
