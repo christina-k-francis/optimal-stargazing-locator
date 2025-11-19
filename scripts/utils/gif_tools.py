@@ -251,7 +251,7 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
         cbar.ax.set_yticklabels(cbar_tick_labels)
         cbar.ax.yaxis.set_tick_params(color=fg_color)
         cbar.outline.set_edgecolor(fg_color)
-        plt.setp(plt.getp(cb.ax.axes, 'yticklabels'), 
+        plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), 
                  color=fg_color, fontsize=16) # cbar tick labels
         # final touches
         timestamp = stargazing_data.valid_time.values
