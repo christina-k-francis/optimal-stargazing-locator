@@ -150,19 +150,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
     # change -1 values to NaN
     slice_2d = slice_2d.where(slice_2d != -1, np.nan)
 
-    # Extract unique y/x values from 2D arrays
-    y_vals = slice_2d.latitude[:, 0].values  # First column
-    x_vals = slice_2d.longitude[0, :].values  # First row
-    
-    # Reassign as 1D
-    slice_2d = slice_2d.assign_coords({
-        'y': y_vals,
-        'x': x_vals
-    })
-
-    # Then drop 2D coords
-    slice_2d = slice_2d.drop_vars(['latitude', 'longitude'])
-
     # Handle potential timedelta overflow
     slice_2d = _fix_timedelta_overflow(slice_2d)
 
@@ -196,7 +183,9 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             slice_2d = slice_2d.sortby("y", ascending=False)
 
         # Drop 2D geographic coordinates to prevent reprojection conflict
-        slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
+        if slice_2d.latitude.ndim == 2:
+            slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
+
         # Reproject into Web Mercator
         slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
@@ -263,7 +252,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                                ColorInterp.green,
                                ColorInterp.blue,
                                ColorInterp.alpha)
-            
         
         # Generate tiles from RGBA GeoTIFF
         try:
