@@ -559,6 +559,13 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
     lp_grades = grade_dataset(lp_da, 'lp')
     moon_grades = grade_dataset(moon_da, 'moon')
 
+    # let's ensure each variable has the proper CRS and Transform
+    for grade_da in [clouds_grades, precip_grades, lp_grades, moon_grades]:
+    if grade_da.rio.crs is None:
+        grade_da.rio.write_crs(clouds_da.rio.crs, inplace=True)
+    if grade_da.rio.transform() is None:
+        grade_da.rio.write_transform(clouds_da.rio.transform(), inplace=True)
+
     logger.info('calculating spatiotemporal stargazing grades')
     # variable weights
     w_precip = 0.4
@@ -599,9 +606,11 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
         stargazing_ds[var] = stargazing_ds[var].astype('int8')  
         # remove old encoding->new metadata infers current state
         stargazing_ds[var].encoding.clear()
+        # ensure crs and transform are preserved
+        stargazing_ds[var].rio.write_crs(clouds_da.rio.crs, inplace=True)
+        stargazing_ds[var].rio.write_transform(clouds_da.rio.transform(), inplace=True)
     # ensuring chunk alignment
     stargazing_ds = stargazing_ds.chunk(target_chunks)
-
 
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
@@ -611,6 +620,15 @@ def main_stargazing_calc_flow(skip_stargazing_tiles=False):
                           'Stargazing Conditions Grades',
                           ['N/A','A+','A','B','C','D','F']) 
     
+    # debugging step before generating tiles
+    logger.info(f"Stargazing grades stats:," 
+                f"min={float(stargazing_ds['grade_num'].min())},"
+                f"max={float(stargazing_ds['grade_num'].max())},"
+                f"shape={stargazing_ds['grade_num'].shape}")
+    logger.info(f"CRS: {stargazing_ds['grade_num'].rio.crs}")
+    logger.info(f"Transform: {stargazing_ds['grade_num'].rio.transform()}")
+    logger.info(f"Has NaN values: {bool(np.any(np.isnan(stargazing_ds['grade_num'].values)))}")
+
     if skip_stargazing_tiles == False:
         logger.info(('generating stargazing grade tileset'))
         gen_tiles_task(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)), 
