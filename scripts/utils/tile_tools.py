@@ -147,8 +147,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
     # Extract data for this timestep
     slice_2d = ds.isel(step=timestep_idx)
-    # change -1 values to NaN
-    slice_2d = slice_2d.where(slice_2d != -1, np.nan)
 
     # Extract unique y/x values from 2D arrays
     y_vals = slice_2d.latitude[:, 0].values  # First column
@@ -265,7 +263,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         try:
             subprocess.run([
                 "gdal2tiles.py",
-                "-a", "0,0,0,0", # Set transparent pixels via alpha
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
