@@ -194,10 +194,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         if "y" in slice_2d.dims:
             slice_2d = slice_2d.sortby("y", ascending=False)
 
-        # Drop 2D geographic coordinates to prevent reprojection conflict
-        if slice_2d.latitude.ndim == 2:
-            slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
-
         # Reproject into Web Mercator
         slice_2d = slice_2d.rio.reproject("EPSG:3857")
 
