@@ -208,7 +208,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
         # ensure y-axis is in the correct order
         if slice_2d.y[0] < slice_2d.y[-1]:
-            slice_2d = slice_2d.sortby("y", ascending=False)
+            slice_2d = slice_2d.sortby("y", ascending=True)
         
         # Verify data isn't all NaN after reprojection
         if np.all(np.isnan(slice_2d.values)):
