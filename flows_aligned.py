@@ -391,7 +391,6 @@ def light_pollution_prep_subflow(bucket_name, target_da):
     USA_shp = gpd.read_file('scripts/utils/geo_ref_data/cb_2018_us_nation_5m.shp')
     conusa_mask = (-124.8, 24.4, -66.8, 49.4)
     conusa = gpd.clip(USA_shp, conusa_mask).to_crs("EPSG:4326")
-    conusa['geometry'] = conusa.geometry.buffer(distance=1) # create ~100K meter buffer
 
     # clip lp da using CONUS mask
     lp_clipped = lightpollution_clipped.rio.clip(conusa.geometry, 
@@ -873,7 +872,7 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     if skip_stargazing_tiles == False:
         logger.info(('generating stargazing grade tileset'))
         gen_tiles_task(stargazing_ds['grade_num'].assign_attrs((stargazing_ds.attrs | clouds_da.attrs)), 
-                       "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, "gnuplot2_r",
+                       "stargazing_grade", "data-layer-tiles/Stargazing_Tiles", 0.01, cmap=None,
                        vmin=0, vmax=5, skip_tiles=skip_stargazing_tiles)
         
 # for script execution
