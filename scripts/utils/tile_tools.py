@@ -192,10 +192,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         # Set spatial dimensions explicitly
         slice_2d.rio.set_spatial_dims(x_dim='x', y_dim='y', inplace=True)
 
-        # ensure y-axis is in the correct order
-        if slice_2d.y[0] < slice_2d.y[-1]:
-            slice_2d = slice_2d.sortby("y", ascending=False)
-
         # debugging check of spatial extent
         logger.info(f"Before reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
         logger.info(f"Before reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
@@ -206,6 +202,10 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
         logger.info(f"After reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
 
+        # ensure y-axis is in the correct order
+        if slice_2d.y[0] < slice_2d.y[-1]:
+            slice_2d = slice_2d.sortby("y", ascending=False)
+        
         # Verify data isn't all NaN after reprojection
         if np.all(np.isnan(slice_2d.values)):
             logger.error(f"All NaN values after reprojection at timestep {timestep_idx}")
