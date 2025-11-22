@@ -17,10 +17,9 @@ import pytz
 # plotting
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
-from matplotlib.patches import PathPatch
-import geopandas as gpd
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 # custom fxs
@@ -196,45 +195,71 @@ def create_nws_temp_gif(temp_ds, cmap, cbar_label,
     gc.collect # garbage collector. deletes data no longer in use
         
 def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels, 
-                          cmap='gnuplot2_r', bucket_name='optimal-stargazing-locator'):
-    # prepare ConUSA shapefile for clipping
-    USA_shp = gpd.read_file('scripts/utils/geo_ref_data/cb_2018_us_nation_5m.shp')
-    conusa_mask = (-124.8, 24.4, -66.8, 49.4)
-    conusa = gpd.clip(USA_shp, conusa_mask)
-    # turn multipolygon into a single polygon object
-    mask_geometry = conusa.geometry.union_all()
-    # create the clipping path
-    poly_path = geometry_to_path(mask_geometry)
-
+                          bucket_name='optimal-stargazing-locator'):
+    
+    # fig color parameters
+    fg_color = 'white'
+    bg_color = '#1b2232'
+    # creating a custom colormap for Stargazing Grades
+    colors1 = plt.cm.inferno(np.linspace(0., 1, 128))[30:85,:]
+    colors2 = plt.cm.YlOrRd_r(np.linspace(0., 1, 96))[38:70,:]
+    colors3 = plt.cm.terrain_r(np.linspace(0., 1, 128))[57:118,:]
+    colors = np.vstack((colors1, colors2, colors3))
+    colormap = mcolors.LinearSegmentedColormap.from_list('stargazing_colormap', colors, N=75).reversed()
+    colormap.set_bad(color=bg_color)
+    
     images = []
     for time_step in range(len(stargazing_da.step.values)):
         stargazing_data = stargazing_da[time_step]
+        stargazing_data = stargazing_data.where(stargazing_data != -1, np.nan)
         lat = stargazing_data.latitude
         lon = stargazing_data.longitude
-    
-        fig = plt.figure(figsize=(12,6))
-        ax = fig.add_subplot(1,1,1, projection=ccrs.PlateCarree())
-        pc = plt.pcolormesh(lon, lat, stargazing_data, cmap=cmap,
-                            transform=ccrs.PlateCarree())
-        pc.set_clip_path(PathPatch(poly_path, transform=ax.transData))
-        plt.clim(-1,5)
-        gl = ax.gridlines(draw_labels=True, x_inline=False, y_inline=False, linewidth=0.5) 
-        ax.add_feature(cfeature.STATES, edgecolor='gray', linewidth=0.5) 
-        ax.add_feature(cfeature.BORDERS, linestyle=':') 
-        ax.coastlines(resolution='110m', zorder=3) 
-        ax.set_extent([-125, -66, 22, 52], crs=ccrs.PlateCarree())
+        # create figure
+        fig = plt.figure(figsize=(12,6), facecolor=bg_color)
+        ax = fig.add_subplot(1,1,1, 
+                             projection=ccrs.PlateCarree())
+        ax.set_facecolor(bg_color) # set figure face color
+        for spine in ax.spines.values():
+            spine.set_edgecolor(bg_color)         # set figure border color
+        # create the main image/plot
+        im = plt.pcolormesh(lon, lat, stargazing_data, 
+                            cmap=colormap,
+                            transform=ccrs.PlateCarree(), 
+                            shading='auto')
+        im.axes.tick_params(color=fg_color, labelcolor=fg_color)
+        # define gridlines
+        gl = ax.gridlines(crs=ccrs.PlateCarree(),
+                          draw_labels=True, x_inline=False, 
+                          y_inline=False, linewidth=0.5,
+                          color=fg_color) 
         gl.top_labels=False
+        gl.right_labels=False
+        gl.xlabel_style = {'color': fg_color}
+        gl.ylabel_style = {'color': fg_color}
+        # specify geographic features
+        ax.add_feature(cfeature.STATES, edgecolor=fg_color, linewidth=0.5) 
+        ax.add_feature(cfeature.BORDERS, edgecolor=fg_color, linestyle=':') 
+        ax.coastlines(resolution='110m', zorder=3, color=fg_color) 
+        ax.set_extent([-125, -66, 22, 52], crs=ccrs.PlateCarree())
+        # define colorbar + adjust settings
         cbar = plt.colorbar(ax=ax, 
                             orientation='vertical', 
-                            pad=0.05,
-                            label=f'{cbar_label}', 
+                            pad=0.01, 
                             extend='neither',
                             shrink=0.8)
-        cbar.set_label(label=cbar_label)
-        cbar.ax.set_yticks(np.linspace(-1,5,7))
+        cbar.ax.set_yticks(np.linspace(0,5,6))
         cbar.ax.set_yticklabels(cbar_tick_labels)
-        local_dt = pd.to_datetime(stargazing_data.valid_time.values).tz_localize(mountain_tz)
-        ax.set_title(f"Stargazing Grades on {local_dt.strftime('%Y-%m-%d %H:%M UTC')}")
+        cbar.ax.yaxis.set_tick_params(color=fg_color)
+        cbar.outline.set_edgecolor(fg_color)
+        plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), 
+                 color=fg_color, fontsize=16) # cbar tick labels
+        # final touches
+        timestamp = stargazing_data.valid_time.values
+        pd_timestamp = pd.to_datetime(timestamp)
+        formatted_timestamp = pd_timestamp.strftime('%d %b %Y at %I:%M%p')
+        ax.set_title(f"Stargazing Conditions on {formatted_timestamp} UTC",
+              color=fg_color, fontsize=25)
+        plt.tight_layout()
         
         img = fig2img(fig)
         images.append(img)
@@ -247,7 +272,7 @@ def create_stargazing_gif(stargazing_da, cbar_label, cbar_tick_labels,
                    format='GIF', 
                    save_all=True,
                    append_images=images[1:], 
-                   duration=700, 
+                   duration=800, 
                    loop=0)
     gif_buffer.seek(0)
 
