@@ -96,6 +96,10 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     """
     logger = logging_setup()
     logger.info(f"Generating tiles for {layer_name} with colormap: {colormap_name}")
+    
+    # documenting data array timestep range
+    timesteps = [pd.to_datetime(timestep).strftime('%d%b%Y at %I:%M%p') for timestep in ds['valid_time'].values]
+    logger.info(f"Tileset Date Range: {timesteps[0]} - {timesteps[-1]}")
 
     num_steps = ds.sizes['step']
     
