@@ -147,18 +147,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
     # Extract data for this timestep
     slice_2d = ds.isel(step=timestep_idx)
-
-    # Extract unique y/x values from 2D arrays
-    y_vals = slice_2d.latitude[:, 0].values  # First column
-    x_vals = slice_2d.longitude[0, :].values  # First row
-    
-    # Reassign as 1D
-    slice_2d = slice_2d.assign_coords({
-        'y': y_vals,
-        'x': x_vals
-    })
-    # Then drop 2D coords
-    slice_2d = slice_2d.drop_vars(['latitude', 'longitude'])
+    # change -1 values to NaN
+    slice_2d = slice_2d.where(slice_2d != -1, np.nan)
 
     # Handle potential timedelta overflow
     slice_2d = _fix_timedelta_overflow(slice_2d)
@@ -168,32 +158,53 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}.tif"
         tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
-        # Extract transform based on attributes and GRIB metadata
-        if slice_2d.rio.crs is None or slice_2d.rio.transform() is None:
-            logger.error(f"Missing CRS or transform at timestep {timestep_idx}")
-            # Extract from attributes as fallback
-            dx = slice_2d.attrs["GRIB_DxInMetres"]
-            dy = slice_2d.attrs["GRIB_DyInMetres"]
-            minx = -2764474.3507319926
-            maxy = 3232111.7107923944
-            transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
+        # Define the CONUS CRS from NDFD - Lambert Conformal Conic
+        ndfd_proj4 = (
+            "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
+            "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
+        )
 
-            # Define CONUS Lambert Conformal Conic projection (from NDFD)
-            ndfd_proj4 = (
-                "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
-                "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
-            )
+        # build the affine and transform
+        dx = slice_2d.attrs["GRIB_DxInMetres"]
+        dy = slice_2d.attrs["GRIB_DyInMetres"]
+        minx = -2764474.3507319926
+        maxy = 3232111.7107923944
+        transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
 
-            # Assign appropriate transform and CRS info.
-            slice_2d.rio.write_transform(transform, inplace=True)
-            slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+        # creating actual Lambert Conformal Conic coordinates (meters)
+        ny, nx = slice_2d.shape
+        x_coords = minx + np.arange(nx) * dx + dx / 2  
+        y_coords = maxy - np.arange(ny) * dy - dy / 2  # y is decreasing
+
+        # Reassigning X,Y dims as 1D LCC coordinates
+        slice_2d = slice_2d.assign_coords({
+                'x': x_coords,
+                'y': y_coords
+            })
+
+        # drop the 2D geographic coords
+        slice_2d = slice_2d.drop_vars(['latitude', 'longitude'], errors='ignore')
+
+        # Assign appropriate transform and CRS info.
+        slice_2d.rio.write_transform(transform, inplace=True)
+        slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
+
+        # Set spatial dimensions explicitly
+        slice_2d.rio.set_spatial_dims(x_dim='x', y_dim='y', inplace=True)
 
         # ensure y-axis is in the correct order
-        if "y" in slice_2d.dims:
+        if slice_2d.y[0] < slice_2d.y[-1]:
             slice_2d = slice_2d.sortby("y", ascending=False)
+
+        # debugging check of spatial extent
+        logger.info(f"Before reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
+        logger.info(f"Before reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
 
         # Reproject into Web Mercator
         slice_2d = slice_2d.rio.reproject("EPSG:3857")
+        # verify the spatial extent after reprojecting
+        logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
+        logger.info(f"After reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
 
         # Verify data isn't all NaN after reprojection
         if np.all(np.isnan(slice_2d.values)):
@@ -263,6 +274,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         try:
             subprocess.run([
                 "gdal2tiles.py",
+                "-a", "0,0,0,0",
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
