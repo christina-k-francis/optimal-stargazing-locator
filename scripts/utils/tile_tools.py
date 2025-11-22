@@ -205,10 +205,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         # verify the spatial extent after reprojecting
         logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
         logger.info(f"After reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
-
-        # ensure y-axis is in the correct order
-        if slice_2d.y[0] < slice_2d.y[-1]:
-            slice_2d = slice_2d.sortby("y", ascending=True)
         
         # Verify data isn't all NaN after reprojection
         if np.all(np.isnan(slice_2d.values)):
@@ -217,6 +213,26 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
         # Apply colormap and save as RGB GeoTIFF
         data = slice_2d.values
+
+        # check if the y-axis is correctly oriented (N to S)
+        y_ascending = slice_2d.y[0] < slice_2d.y[-1]
+        # ensure y-axis is in the correct order
+        if y_ascending:
+            # Data is south-to-north, need to flip to north-to-south
+            data = np.flipud(data)
+            logger.info("Flipped data array to north-to-south orientation")
+
+        # Calculate a new transform to account for potentially flipped y-axis
+        x_min, x_max = float(slice_2d.x.min()), float(slice_2d.x.max())
+        y_min, y_max = float(slice_2d.y.min()), float(slice_2d.y.max())
+        # Calculate pixel size
+        pixel_width = (x_max - x_min) / data.shape[1]
+        pixel_height = (y_max - y_min) / data.shape[0]
+        # Transform: top-left origin, positive x right, negative y down
+        geo_transform = affine.Affine(
+            pixel_width, 0, x_min,
+            0, -pixel_height, y_max  # Note: negative pixel_height, origin at y_max
+        )
 
         # define min+max values in the dataset
         if vmin is None:
@@ -264,7 +280,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             count=4,
             dtype=rgba_img.dtype,
             crs="EPSG:3857",
-            transform=slice_2d.rio.transform()
+            transform=geo_transform
         ) as dst:
             for band in range(4):
                 dst.write(rgba_img[:, :, band], band + 1)
