@@ -274,11 +274,22 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                                ColorInterp.blue,
                                ColorInterp.alpha)
         
+        # Diagnostic step to check the orientation of the GeoTIFF
+        with rasterio.open(geo_path, 'r') as src:
+            logger.info(f"GeoTIFF bounds: {src.bounds}")
+            logger.info(f"GeoTIFF transform: {src.transform}")
+            logger.info(f"Transform origin (top-left): X={src.transform.c}, Y={src.transform.f}")
+            logger.info(f"Y pixel size (should be negative): {src.transform.e}")
+            
+            # Check corner values to verify orientation
+            first_band = src.read(1)
+            logger.info(f"Top-left corner (0,0) value: {first_band[0, 0]}")
+            logger.info(f"Bottom-left corner (-1,0) value: {first_band[-1, 0]}")
+
         # Generate tiles from RGBA GeoTIFF
         try:
             subprocess.run([
                 "gdal2tiles.py",
-                "-a", "0,0,0,0",
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
