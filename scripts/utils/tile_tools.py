@@ -290,6 +290,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         try:
             subprocess.run([
                 "gdal2tiles.py",
+                "--xyz", # use OpenStreetMap XYZ scheme, instead of conventional TMS
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
