@@ -12,14 +12,14 @@ Created on Sat June 28 18:24:00 2025
     be displayed as map layers.
 """
 ###
+import io
 import os
 import logging
 import threading
 import time
-from pathlib import Path
-
 import s3fs
-import httpx
+from pathlib import Path
+from PIL import Image
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,8 +93,14 @@ def s3key(key: str) -> str:
     """Return fully-qualified s3fs path 'bucket/key'."""
     return f"{BUCKET}/{key.lstrip('/')}"
 
-def slippy_y_from_tms(z: int, y: int) -> int:
-    """ Flips y value from TMS to Slippy format"""
+def flip_y_coordinate(z: int, y: int) -> int:
+    """ 
+    Converts between TMS and Slippy/XYZ Y coordinates.
+    This is a self-inverse operation - works in both directions.
+    
+    TMS: Origin at bottom-left, Y increases northward
+    XYZ/Slippy: Origin at top-left, Y increases southward   
+    """
     return (2 ** z) - 1 - y
 
 # --- Blank Tile Fallback ------------------------------------------------------------
@@ -125,16 +131,18 @@ async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y
         logger.warning(f"Invalid layer: {layer}")
         return Response(status_code=404, content="Layer not found")
 
-    slippy_y = slippy_y_from_tms(z,y)
-    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
+    # check cache first (stored in Slippy Y format == same as frontend request)
+    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{y}.png"
     if local_path.exists():
         logger.info(f"Tile found locally at {local_path}")
         return Response(status_code=200)
     
+    # Convert to TMS Y for R2 lookup
+    tms_y = flip_y_coordinate(z,y)
     key = (
-        f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
+        f"{LAYER_PATHS[layer]}/{z}/{x}/{tms_y}.png"
         if layer == "LightPollution_Tiles" and timestamp == "static"
-        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
+        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{tms_y}.png"
     )
     try:
         exists = fs.exists(s3key(key))
@@ -150,26 +158,37 @@ async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y:
         logger.warning(f"Invalid layer requested: {layer}")
         return Response(status_code=404, content="Layer not found")
 
-    slippy_y = slippy_y_from_tms(z,y)
     headers = {
         "Cache-Control": "public, max-age=604800",  # Cache for 7 days
         "Content-Type": "image/png"
     }
 
-    # Local cache path
-    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{slippy_y}.png"
+    # Local cache path (slippy format from frontend)
+    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{y}.png"
     local_path.parent.mkdir(parents=True, exist_ok=True)
     if local_path.exists():
-        return StreamingResponse(open(local_path, "rb"), headers=headers)
+        return StreamingResponse(open(local_path, "rb"), headers=headers, media_type="image/png")
+    
+    # Let's convert the slippy Y from the frontend to TMS for R2 lookup
+    tms_y = flip_y_coordinate(z,y)
         
     key = (
-        f"{LAYER_PATHS[layer]}/{z}/{x}/{slippy_y}.png"
+        f"{LAYER_PATHS[layer]}/{z}/{x}/{tms_y}.png"
         if layer == "LightPollution_Tiles" and timestamp == "static"
-        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{slippy_y}.png"
+        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{tms_y}.png"
     )
     try:
-        fs.get(s3key(key), str(local_path))  # download to cache
-        return StreamingResponse(open(local_path, "rb"), headers=headers)
+        temp_path = local_path.parent / f"temp_{tms_y}.png"
+        fs.get(s3key(key), str(temp_path)) # download tile to cache
+        
+        # Flip the image vertically to correct the upside-down issue
+        with Image.open(temp_path) as img:
+            flipped = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            flipped.save(local_path, "PNG")
+        
+        temp_path.unlink()
+        
+        return StreamingResponse(open(local_path, "rb"), headers=headers, media_type="image/png")
     except Exception as e:
         logger.warning(f"Tile miss {key}: {e}")
         return await serve_blank_tile(local_path)
