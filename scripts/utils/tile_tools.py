@@ -181,10 +181,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         y_coords = maxy - np.arange(ny) * dy - dy / 2  # y is decreasing
 
         # Reassigning X,Y dims as 1D LCC coordinates
-        slice_2d = slice_2d.assign_coords({
-                'x': x_coords,
-                'y': y_coords
-            })
+        slice_2d = slice_2d.assign_coords({'x': x_coords, 'y': y_coords})
 
         # drop the 2D geographic coords
         slice_2d = slice_2d.drop_vars(['latitude', 'longitude'], errors='ignore')
@@ -213,21 +210,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
         # Apply colormap and save as RGB GeoTIFF
         data = slice_2d.values
-
-        # ensure y-axis is descending from North to South
-        if slice_2d.y[0] < slice_2d.y[-1]:
-            data = np.flipud(data)
-        # Calculate a new transform to account for potentially flipped y-axis
-        x_min, x_max = float(slice_2d.x.min()), float(slice_2d.x.max())
-        y_min, y_max = float(slice_2d.y.min()), float(slice_2d.y.max())
-        # Calculate pixel size
-        pixel_width = (x_max - x_min) / data.shape[1]
-        pixel_height = (y_max - y_min) / data.shape[0]
-        # Transform: top-left origin, positive x right, negative y down
-        geo_transform = affine.Affine(
-            pixel_width, 0, x_min,
-            0, -pixel_height, y_max  # Note: negative pixel_height, origin at y_max
-        )
+        # flip the data vertically
+        data = np.flipud(data)
 
         # define min+max values in the dataset
         if vmin is None:
@@ -265,11 +249,22 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         rgba_img = (colormap(norm(data)) * 255).astype("uint8")
         rgba_img[:, :, 3] = np.where(valid_mask, 255, 0)
 
-        # write RGBA GeoTIFF to a temp path for pre-tile generation processing
-        temp_geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}_temp.tif"
-
+        # Build corrected transform for flipped data, top row now has max Y value
+        x_min, x_max = float(slice_2d.x.min()), float(slice_2d.x.max())
+        y_min, y_max = float(slice_2d.y.min()), float(slice_2d.y.max())
+        
+        pixel_width = (x_max - x_min) / data.shape[1]
+        pixel_height = (y_max - y_min) / data.shape[0]
+        
+        # Transform for north-up orientation
+        corrected_transform = affine.Affine(
+            pixel_width, 0, x_min,
+            0, -pixel_height, y_max  # Negative height, origin at max Y
+        )
+        
+        # let's generate the rgba geotiff
         with rasterio.open(
-            temp_geo_path,
+            geo_path,
             "w",
             driver="GTiff",
             height=rgba_img.shape[0],
@@ -277,7 +272,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             count=4,
             dtype=rgba_img.dtype,
             crs="EPSG:3857",
-            transform=geo_transform
+            transform=corrected_transform
         ) as dst:
             for band in range(4):
                 dst.write(rgba_img[:, :, band], band + 1)
@@ -287,22 +282,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                                ColorInterp.blue,
                                ColorInterp.alpha)
 
-        # let's use gdalwarp to force correct vertical orientation
-        try:
-            subprocess.run([
-                "gdalwarp",
-                "-t_srs", "EPSG:3857",
-                "-of", "GTiff",
-                "-co", "TILED=YES",
-                "-co", "COMPRESS=LZW",
-                str(temp_geo_path),
-                str(geo_path)
-            ], check=True, capture_output=True, text=True)
-            logger.info("Reoriented GeoTIFF using gdalwarp")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"gdalwarped failed: {e.stderr}")
-            raise
-        
         # Diagnostic step to check the orientation of the GeoTIFF
         with rasterio.open(geo_path, 'r') as src:
             logger.info(f"GeoTIFF bounds: {src.bounds}")
@@ -319,6 +298,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         try:
             subprocess.run([
                 "gdal2tiles.py",
+                "--xyz", # explicitly set xyz/slippy tile coords
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
