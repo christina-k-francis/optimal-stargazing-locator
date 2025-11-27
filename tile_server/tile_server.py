@@ -131,7 +131,7 @@ async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y
         logger.warning(f"Invalid layer: {layer}")
         return Response(status_code=404, content="Layer not found")
 
-    # Let's convert the slippy Y from the frontend to TMS
+    # check cache first (stored in Slippy Y format == same as frontend request)
     local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{y}.png"
     if local_path.exists():
         logger.info(f"Tile found locally at {local_path}")
@@ -163,11 +163,8 @@ async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y:
         "Content-Type": "image/png"
     }
 
-    # Let's convert the slippy Y from the frontend to TMS
-    tms_y = flip_y_coordinate(z,y)
-
-    # Local cache path 
-    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{tms_y}.png"
+    # Local cache path (slippy format from frontend)
+    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{y}.png"
     local_path.parent.mkdir(parents=True, exist_ok=True)
     if local_path.exists():
         return StreamingResponse(open(local_path, "rb"), headers=headers, media_type="image/png")
@@ -286,3 +283,4 @@ def periodic_cache_cleanup():
 if __name__ == '__main__':
     threading.Thread(target=periodic_cache_cleanup, daemon=True).start()
     import uvicorn
+    uvicorn.run(app, host='0.0.0.0', port=5000)
