@@ -137,12 +137,10 @@ async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y
         logger.info(f"Tile found locally at {local_path}")
         return Response(status_code=200)
     
-    # Convert to TMS Y for R2 lookup
-    tms_y = flip_y_coordinate(z,y)
     key = (
-        f"{LAYER_PATHS[layer]}/{z}/{x}/{tms_y}.png"
+        f"{LAYER_PATHS[layer]}/{z}/{x}/{y}.png"
         if layer == "LightPollution_Tiles" and timestamp == "static"
-        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{tms_y}.png"
+        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{y}.png"
     )
     try:
         exists = fs.exists(s3key(key))
@@ -168,17 +166,14 @@ async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y:
     local_path.parent.mkdir(parents=True, exist_ok=True)
     if local_path.exists():
         return StreamingResponse(open(local_path, "rb"), headers=headers, media_type="image/png")
-    
-    # Let's convert the slippy Y from the frontend to TMS for R2 lookup
-    tms_y = flip_y_coordinate(z,y)
         
     key = (
-        f"{LAYER_PATHS[layer]}/{z}/{x}/{tms_y}.png"
+        f"{LAYER_PATHS[layer]}/{z}/{x}/{y}.png"
         if layer == "LightPollution_Tiles" and timestamp == "static"
-        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{tms_y}.png"
+        else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{y}.png"
     )
     try:
-        temp_path = local_path.parent / f"temp_{tms_y}.png"
+        temp_path = local_path.parent / f"temp_{y}.png"
         fs.get(s3key(key), str(temp_path)) # download tile to cache
         
         # Flip the image vertically to correct the upside-down issue
