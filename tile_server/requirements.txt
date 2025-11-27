@@ -1,6 +1,7 @@
 boto3
 fastapi==0.110.1
 httpx
+Pillow
 requests==2.31.0
 s3fs
 storage3==0.6.0
