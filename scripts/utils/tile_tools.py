@@ -9,7 +9,6 @@ from prefect import task
 # tile generation
 import affine
 import subprocess
-from osgeo_utils import gdal2tiles
 from concurrent.futures import ThreadPoolExecutor, as_completed
 # cloud connection
 import os
@@ -25,6 +24,7 @@ import geopandas as gpd
 import rasterio
 from rasterio.enums import ColorInterp
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize
 # custom fxs
 from scripts.utils.logging_tools import logging_setup, log_memory_usage
@@ -80,7 +80,7 @@ def upload_tile_to_r2(tile_output_dir, R2_prefix, timestamp_str, sleep_secs):
 
 @task(log_prints=True, retries=3)
 def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs, 
-                           colormap_name="viridis", vmin=None, vmax=None):
+                           colormap_name, vmin=None, vmax=None):
     """
     description:
         Converts an xarray data array to colored raster tiles per timestep in parallel.
@@ -96,16 +96,20 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     """
     logger = logging_setup()
     logger.info(f"Generating tiles for {layer_name} with colormap: {colormap_name}")
+    
+    # documenting data array timestep range
+    timesteps = [pd.to_datetime(timestep).strftime('%d%b%Y at %I:%M%p') for timestep in ds['valid_time'].values]
+    logger.info(f"Tileset Date Range: {timesteps[0]} - {timesteps[-1]}")
 
     num_steps = ds.sizes['step']
-
+    
     # Process timesteps in parallel
     with ThreadPoolExecutor(max_workers=4) as executor:
         # Submit all timesteps
         futures = {executor.submit(
             generate_single_timestep_tiles,
             ds, layer_name, R2_prefix, i, sleep_secs, 
-            colormap_name, vmin, vmax
+            cmap=colormap_name, vmin=vmin, vmax=vmax
                 ): i for i in range(num_steps)
             }
         
@@ -147,6 +151,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
     # Extract data for this timestep
     slice_2d = ds.isel(step=timestep_idx)
+    # change -1 values to NaN
+    slice_2d = slice_2d.where(slice_2d != -1, np.nan)
 
     # Handle potential timedelta overflow
     slice_2d = _fix_timedelta_overflow(slice_2d)
@@ -156,61 +162,107 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}.tif"
         tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
-        # Extract transform based on attributes and GRIB metadata
+        # Define the CONUS CRS from NDFD - Lambert Conformal Conic
+        ndfd_proj4 = (
+            "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
+            "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
+        )
+
+        # build the affine and transform
         dx = slice_2d.attrs["GRIB_DxInMetres"]
         dy = slice_2d.attrs["GRIB_DyInMetres"]
         minx = -2764474.3507319926
         maxy = 3232111.7107923944
         transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
 
-        # Define CONUS Lambert Conformal Conic projection (from NDFD)
-        ndfd_proj4 = (
-            "+proj=lcc +lat_1=25 +lat_2=25 +lat_0=25 "
-            "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
-        )
+        # creating actual Lambert Conformal Conic coordinates (meters)
+        ny, nx = slice_2d.shape
+        x_coords = minx + np.arange(nx) * dx + dx / 2  
+        y_coords = maxy - np.arange(ny) * dy - dy / 2  # y is decreasing
 
-        # Assign transform and appropriate CRS
+        # Reassigning X,Y dims as 1D LCC coordinates
+        slice_2d = slice_2d.assign_coords({'x': x_coords, 'y': y_coords})
+
+        # drop the 2D geographic coords
+        slice_2d = slice_2d.drop_vars(['latitude', 'longitude'], errors='ignore')
+
+        # Assign appropriate transform and CRS info.
         slice_2d.rio.write_transform(transform, inplace=True)
         slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
 
-        # ensure y-axis is in the correct order
-        if "y" in slice_2d.dims:
-            slice_2d = slice_2d.sortby("y", ascending=False)
+        # Set spatial dimensions explicitly
+        slice_2d.rio.set_spatial_dims(x_dim='x', y_dim='y', inplace=True)
 
-        # Drop 2D geographic coordinates to prevent reprojection conflict
-        slice_2d = slice_2d.drop_vars(["latitude", "longitude"], errors="ignore")
+        # debugging check of spatial extent
+        logger.info(f"Before reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
+        logger.info(f"Before reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
+
         # Reproject into Web Mercator
         slice_2d = slice_2d.rio.reproject("EPSG:3857")
+        # verify the spatial extent after reprojecting
+        logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
+        logger.info(f"After reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
 
-        # Apply CONUS mask to tile data
-        USA_gdf = gpd.read_file(conus_shapefile)
-        # prepare shapefile - clipping to conus
-        conusa_mask = (-124.8, 24.4, -66.8, 49.4)
-        conus_gdf = gpd.clip(USA_gdf, conusa_mask)
-        conus_gdf = conus_gdf.to_crs("EPSG:3857")
-            
-        # Clip ds to CONUS boundary
-        slice_2d = slice_2d.rio.clip(conus_gdf.geometry, all_touched=True)
+        # Verify data isn't all NaN after reprojection
+        if np.all(np.isnan(slice_2d.values)):
+            logger.error(f"All NaN values after reprojection at timestep {timestep_idx}")
+            raise ValueError("Reprojection resulted in all NaN values")
 
         # Apply colormap and save as RGB GeoTIFF
         data = slice_2d.values
+        # flip the data vertically
+        data = np.flipud(data)
 
-        # Use provided vmin/vmax or calculate from data
+        # define min+max values in the dataset
         if vmin is None:
             vmin = float(np.nanmin(data))
         if vmax is None:
             vmax = float(np.nanmax(data))
 
+        # Verify we have valid data
+        if np.isnan(vmin) or np.isnan(vmax):
+            logger.error(f"Invalid data range at timestep {timestep_idx}: vmin={vmin}, vmax={vmax}")
+            raise ValueError("No valid data to render")
+        
         # Create mask 
         valid_mask = ~np.isnan(data)
 
-        # defining RGB colormap
+        # Check if we have any valid pixels
+        if not np.any(valid_mask):
+            logger.error(f"No valid pixels at timestep {timestep_idx}")
+            raise ValueError("No valid pixels to render")
+
+        # defining the RGB value range
         norm = Normalize(vmin=vmin, vmax=vmax)
-        colormap = plt.colormaps[cmap]
+        
+        # defining the colormap
+        if cmap is None:
+            # custom colormap for stargazing grades
+            colors1 = plt.cm.inferno(np.linspace(0., 1, 128))[30:85,:]
+            colors2 = plt.cm.YlOrRd_r(np.linspace(0., 1, 96))[38:70,:]
+            colors3 = plt.cm.terrain_r(np.linspace(0., 1, 128))[57:118,:]
+            colors = np.vstack((colors1, colors2, colors3))
+            colormap = mcolors.LinearSegmentedColormap.from_list('stargazing_colormap', colors, N=75).reversed()
+        else:
+            colormap = plt.colormaps[cmap]
+        # assigning cmap to RGBA values
         rgba_img = (colormap(norm(data)) * 255).astype("uint8")
         rgba_img[:, :, 3] = np.where(valid_mask, 255, 0)
 
-        # create/write RGBA GeoTIFF
+        # Build corrected transform for flipped data, top row now has max Y value
+        x_min, x_max = float(slice_2d.x.min()), float(slice_2d.x.max())
+        y_min, y_max = float(slice_2d.y.min()), float(slice_2d.y.max())
+        
+        pixel_width = (x_max - x_min) / data.shape[1]
+        pixel_height = (y_max - y_min) / data.shape[0]
+        
+        # Transform for north-up orientation
+        corrected_transform = affine.Affine(
+            pixel_width, 0, x_min,
+            0, -pixel_height, y_max  # Negative height, origin at max Y
+        )
+        
+        # let's generate the rgba geotiff
         with rasterio.open(
             geo_path,
             "w",
@@ -220,7 +272,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             count=4,
             dtype=rgba_img.dtype,
             crs="EPSG:3857",
-            transform=slice_2d.rio.transform()
+            transform=corrected_transform
         ) as dst:
             for band in range(4):
                 dst.write(rgba_img[:, :, band], band + 1)
@@ -229,17 +281,28 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                                ColorInterp.green,
                                ColorInterp.blue,
                                ColorInterp.alpha)
+
+        # Diagnostic step to check the orientation of the GeoTIFF
+        with rasterio.open(geo_path, 'r') as src:
+            logger.info(f"GeoTIFF bounds: {src.bounds}")
+            logger.info(f"GeoTIFF transform: {src.transform}")
+            logger.info(f"Transform origin (top-left): X={src.transform.c}, Y={src.transform.f}")
+            logger.info(f"Y pixel size (should be negative): {src.transform.e}")
             
-        
-        # Generate tiles from RGBA GeoTIFF
+            # Check corner values to verify orientation
+            first_band = src.read(1)
+            logger.info(f"Top-left corner (0,0) value: {first_band[0, 0]}")
+            logger.info(f"Bottom-left corner (-1,0) value: {first_band[-1, 0]}")
+
+        # now, let's generate tiles from the oriented RGBA GeoTIFF
         try:
             subprocess.run([
                 "gdal2tiles.py",
+                "--xyz", # explicitly set xyz/slippy tile coords
                 "-z", "0-8",  # Zoom levels
                 str(geo_path),            
                 str(tile_output_dir)      
             ], check=True, capture_output=True, text=True)
-            
             logger.info(f"Tiles generated for timestep {timestep_idx+1}")
         except subprocess.CalledProcessError as e:
             logger.error(f"gdal2tiles failed for timestep {timestep_idx}: {e.stderr}")

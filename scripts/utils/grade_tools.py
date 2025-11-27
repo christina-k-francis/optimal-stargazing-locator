@@ -28,13 +28,13 @@ def grade_cloud(c):
 def grade_lightpollution(lp):
     """ convert given light pollution magnitude to letter grade, 
     where -1=NA, 0=A+, 1=A, 2=B, 3=C, 4=D, 5=F """
-    if np.isnan(lp): return -1
-    if lp >= 0.85: return 0
-    elif lp >= 0.70: return 1
-    elif lp >= 0.55: return 2
-    elif lp >= 0.40: return 3
-    elif lp >= 0.25: return 4
-    else: return 5
+    if np.isnan(lp): return -1 # NaN
+    elif lp >= 0.90: return 0 # A+: pristine nightsky
+    elif  0.75 <= lp < 0.9: return 1 # A: nearly-pristine nightsky
+    elif 0.5 <= lp < 0.75: return 2 # B: winter + summer milkyway are visible
+    elif 0.3 <= lp < 0.50: return 3 # C: winter milky way gone, summer milkyway visible
+    elif 0.1 <= lp < 0.30: return 4 # D: you can see some planets and bright stars
+    elif lp < 0.1: return 5 # F: night sky is never darker than twilight
 
 def grade_moon(m):
     """ convert given moon illumination percent value to letter grade, 
