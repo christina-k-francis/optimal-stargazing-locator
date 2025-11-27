@@ -8,7 +8,7 @@ matplotlib==3.10.3
 numpy==2.1.3
 pandas
 prefect
-pillow
+Pillow
 psutil
 pytz
 rasterio==1.4.3
