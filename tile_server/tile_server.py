@@ -132,14 +132,13 @@ async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y
         return Response(status_code=404, content="Layer not found")
 
     # Let's convert the slippy Y from the frontend to TMS
-    tms_y = flip_y_coordinate(z,y)
-    
-    # check cache first
-    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{tms_y}.png"
+    local_path = CACHE_DIR / layer / timestamp / str(z) / str(x) / f"{y}.png"
     if local_path.exists():
         logger.info(f"Tile found locally at {local_path}")
         return Response(status_code=200)
     
+    # Convert to TMS Y for R2 lookup
+    tms_y = flip_y_coordinate(z,y)
     key = (
         f"{LAYER_PATHS[layer]}/{z}/{x}/{tms_y}.png"
         if layer == "LightPollution_Tiles" and timestamp == "static"
@@ -172,6 +171,9 @@ async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y:
     local_path.parent.mkdir(parents=True, exist_ok=True)
     if local_path.exists():
         return StreamingResponse(open(local_path, "rb"), headers=headers, media_type="image/png")
+    
+    # Let's convert the slippy Y from the frontend to TMS for R2 lookup
+    tms_y = flip_y_coordinate(z,y)
         
     key = (
         f"{LAYER_PATHS[layer]}/{z}/{x}/{tms_y}.png"
@@ -284,4 +286,3 @@ def periodic_cache_cleanup():
 if __name__ == '__main__':
     threading.Thread(target=periodic_cache_cleanup, daemon=True).start()
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=5000)
