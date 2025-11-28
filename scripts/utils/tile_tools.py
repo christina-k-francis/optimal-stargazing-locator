@@ -22,7 +22,7 @@ import gc
 # raster visualization
 import geopandas as gpd
 import rasterio
-from rasterio.enums import ColorInterp
+from rasterio.enums import ColorInterp, Resampling
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize
@@ -198,7 +198,10 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         logger.info(f"Before reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
 
         # Reproject into Web Mercator
-        slice_2d = slice_2d.rio.reproject("EPSG:3857")
+        slice_2d = slice_2d.rio.reproject("EPSG:3857",
+                                          resampling=Resampling.bilinear,
+                                          resolution=300)
+        
         # verify the spatial extent after reprojecting
         logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
         logger.info(f"After reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
