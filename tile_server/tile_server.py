@@ -173,16 +173,7 @@ async def get_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y:
         else f"{LAYER_PATHS[layer]}/{timestamp}/{z}/{x}/{y}.png"
     )
     try:
-        temp_path = local_path.parent / f"temp_{y}.png"
-        fs.get(s3key(key), str(temp_path)) # download tile to cache
-        
-        # Flip the image vertically to correct the upside-down issue
-        with Image.open(temp_path) as img:
-            flipped = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-            flipped.save(local_path, "PNG")
-        
-        temp_path.unlink()
-        
+        fs.get(s3key(key), str(local_path)) # download tile to cache
         return StreamingResponse(open(local_path, "rb"), headers=headers, media_type="image/png")
     except Exception as e:
         logger.warning(f"Tile miss {key}: {e}")
