@@ -11,7 +11,7 @@ on:
 
 jobs:
   debugging-stargazing-grade-calc:
-    runs-on: ubuntu-latest-large  # 16 GB RAM instead of 7 GB
+    runs-on: ubuntu-latest
     environment: stargazing-env
     steps:
       - name: Checkout code
