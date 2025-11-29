@@ -104,7 +104,7 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     num_steps = ds.sizes['step']
     
     # Process timesteps in parallel
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         # Submit all timesteps
         futures = {executor.submit(
             generate_single_timestep_tiles,
