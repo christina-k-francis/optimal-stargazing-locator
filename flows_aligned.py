@@ -2,10 +2,11 @@
 A script for organizing prefect flows, subflows, and tasks
 """
 
-
+import gc
 import xarray as xr
 import numpy as np
 import pandas as pd
+import time
 import pytz
 import affine
 import shapely
@@ -18,7 +19,7 @@ from scripts.utils.grade_tools import grade_dataset
 from scripts.utils.gif_tools import create_nws_gif, create_stargazing_gif
 from scripts.utils.tile_tools import generate_tiles_from_xr
 from scripts.utils.upload_download_tools import upload_zarr_dataset, load_zarr_from_R2, load_tiff_from_R2
-from scripts.utils.logging_tools import logging_setup
+from scripts.utils.logging_tools import logging_setup, log_memory_usage
 
 
 # ----- TASKS ----------------------------------------------------------------#
@@ -51,8 +52,11 @@ def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap,
         logger.warning(f"Skipping tile generation for {layer_name} (skip_tiles=True)")
         return True
     else:
+        log_memory_usage(f"before generating {layer_name} tiles")
         generate_tiles_from_xr(ds, layer_name, R2_prefix, 
                                sleep_secs, cmap, vmin, vmax)
+        gc.collect()
+        log_memory_usage(f"after generating {layer_name} tiles")
         return True
 
 # stargazing grade calculation tasks
@@ -158,8 +162,13 @@ def grade_stargazing(cloud_grades, precip_grades, lp_grades, moon_grades,
         np.vectorize(combine_grades),
         precip_grades, cloud_grades, lp_grades, moon_grades,
         dask="parallelized", output_dtypes=[np.int8])
+    result = grades.astype('int8')
     
-    return grades.astype('int8')
+    # clean up intermediate
+    del grades
+    gc.collect()
+    
+    return result
 
 # ----- SUBFLOWS ----------------------------------------------------------------# 
 # preparing precipitation data for grade calculation
@@ -317,6 +326,9 @@ def moon_data_prep_subflow(target_da):
         interpolated_flat = interpolator(points)
         # Reshape back to 2D grid
         moonlight_highres[i] = interpolated_flat.reshape(lats_2d.shape)
+    # delete coarse data array + excess data after interpolation
+    del moonlight_array, interpolator, points, interpolated_flat
+    gc.collect()
     
     # create lunar data array with proper structure
     moonlight_da = xr.DataArray(
@@ -346,6 +358,9 @@ def moon_data_prep_subflow(target_da):
 
     # apply the mask, preserving all coordinate information
     moonlight_clipped = moonlight_da.where(mask)
+    # remove unclipped array after masking
+    del moonlight_da, mask
+    gc.collect()
 
     # now, let's set the CRS and Transform
     moonlight_clipped.rio.write_crs(target_da.rio.crs, inplace=True)
@@ -385,6 +400,9 @@ def light_pollution_prep_subflow(bucket_name, target_da):
     lightpollution_clipped = lightpollution_da.rio.clip_box(
         minx=-126, miny=24, maxx=-66, maxy=50
     )
+    # delete original data array after rough clip
+    del lightpollution_da
+    gc.collect()
     
     # Apply CONUS Mask
     logger.info('Clipping light pollution data to ConUSA boundary...')
@@ -397,6 +415,10 @@ def light_pollution_prep_subflow(bucket_name, target_da):
                                      "EPSG:4326", 
                                      drop=False, 
                                      all_touched=True)
+    # delete rough clipped data array after applying mask
+    del lightpollution_clipped, USA_shp, conusa
+    gc.collect()
+
     # set a variable name and select the first band of data
     lp_clipped = lp_clipped.isel(band=0).rename('light_pollution_normalized')
 
@@ -426,6 +448,9 @@ def light_pollution_prep_subflow(bucket_name, target_da):
     points = np.column_stack([target_lats_2d.ravel(), target_lons_2d.ravel()])
     lp_interp_flat = interpolator(points)
     lp_interp = lp_interp_flat.reshape(target_lats_2d.shape)
+    # remove interpolation intermediate data, no longer needed
+    del lp_clipped, interpolator, points, lp_interp_flat
+    gc.collect()
 
     # calculate light pollution thresholds for normalization
     mag_thresholds, normalized_values = calc_LP_thresholds_task()
@@ -471,12 +496,18 @@ def light_pollution_prep_subflow(bucket_name, target_da):
     lp_norm_3d = lp_norm_3d.assign_coords(
         step=target_da['step'],
         valid_time=target_da['valid_time'])
+    # delete 2D versions after stacking
+    del lp_da_highres, lp_norm_highres, lp_interp, lp_interp_norm
+    gc.collect()
 
     # merge both LP data arrays into an xarray dataset   
     lp_ds_3d = xr.merge([
         lp_da_3d,
         lp_norm_3d
     ], combine_attrs='drop_conflicts', compat='override')
+    # remove individual 3D arrays after merge
+    del lp_da_3d, lp_norm_3d
+    gc.collect()
 
     # Copy spatial metadata from target
     lp_ds_3d['light_pollution'].rio.write_crs(target_da.rio.crs, inplace=True)
@@ -732,7 +763,9 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
         maxy = 3232111.7107923944
         transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
         precip_da_norm.rio.write_transform(transform, inplace=True)
-    
+    del precip_da  # remove original data array
+    gc.collect() # delete no longer needed data
+
     logger.info('Flow: Retrieving Cloud Cover Data')
     clouds_da = download_sky_task()
     
@@ -757,6 +790,8 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
         maxy = 3232111.7107923944
         transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
         clouds_da_norm.rio.write_transform(transform, inplace=True)
+    del clouds_da  # remove original data array
+    gc.collect() # delete no longer needed data
 
     logger.info('preparing lunar and light pollution data...')
     # ensuring that NWS datasets cover the same forecast datetimes
@@ -774,6 +809,9 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     precip_steps = [np.timedelta64(t - reference_time) 
                     for t in precip_da['valid_time'].values]
     precip_da = precip_da.assign_coords({'step': precip_steps})
+    # clean up of unfiltered normalized data arrays
+    del precip_da_norm, clouds_da_norm
+    gc.collect()
    
     moon_da = moon_data_prep_subflow(clouds_da)
     lp_da = light_pollution_prep_subflow("optimal-stargazing-locator",
@@ -797,6 +835,9 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     precip_grades = grade_dataset(precip_da, 'precip')
     lp_grades = grade_dataset(lp_da, 'lp')
     moon_grades = grade_dataset(moon_da, 'moon')
+    # cleanup data arrays after grading
+    del precip_da, lp_da, moon_da # clouds attrs needed later on
+    gc.collect()
 
     # let's ensure each variable has the proper CRS and Transform
     for grade_da in [clouds_grades, precip_grades, lp_grades, moon_grades]:
@@ -834,6 +875,9 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
         lp_grades.rename("grade_lightpollution"),
         moon_grades.rename("grade_moon")
     ], combine_attrs='drop_conflicts', compat='override')
+    # remove all individual grade arrays, no longer needed
+    del stargazing_grades, precip_grades, clouds_grades, lp_grades, moon_grades
+    gc.collect()
 
     # attach metadata
     stargazing_ds.attrs["legend"] = grade_legend
@@ -851,7 +895,6 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     # ensuring chunk alignment
     stargazing_ds = stargazing_ds.chunk(target_chunks)
 
-
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
 
@@ -868,6 +911,10 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger.info(f"CRS: {stargazing_ds['grade_num'].rio.crs}")
     logger.info(f"Transform: {stargazing_ds['grade_num'].rio.transform()}")
     logger.info(f"Has NaN values: {bool(np.any(np.isnan(stargazing_ds['grade_num'].values)))}")
+    # aggressive cleanup before tile generation
+    gc.collect()
+    time.sleep(1)  # brief pause to ensure cleanup completes
+    log_memory_usage('before generating stargazing tiles')
     
     if skip_stargazing_tiles == False:
         logger.info(('generating stargazing grade tileset'))
