@@ -104,7 +104,7 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     num_steps = ds.sizes['step']
     
     # Process timesteps in parallel
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         # Submit all timesteps
         futures = {executor.submit(
             generate_single_timestep_tiles,
@@ -154,6 +154,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         slice_2d = ds.isel(step=timestep_idx)
         # change -1 values to NaN
         slice_2d = slice_2d.where(slice_2d != -1, np.nan)
+        # save timestep date info
+        timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
 
         # Handle potential timedelta overflow
         slice_2d = _fix_timedelta_overflow(slice_2d)
@@ -268,6 +270,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 pixel_width, 0, x_min,
                 0, -pixel_height, y_max  # Negative height, origin at max Y
             )
+            log_memory_usage(f'before generating GeoTIFF for {timestamp_str}')
             
             # let's generate the rgba geotiff
             with rasterio.open(
@@ -300,6 +303,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 first_band = src.read(1)
                 logger.info(f"Top-left corner (0,0) value: {first_band[0, 0]}")
                 logger.info(f"Bottom-left corner (-1,0) value: {first_band[-1, 0]}")
+            log_memory_usage(f'before generating tiles for {timestamp_str}')
 
             # now, let's generate tiles from the oriented RGBA GeoTIFF
             try:
@@ -316,8 +320,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 raise
 
             # Now, let's upload tiles to R2
-            timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
             upload_tile_to_r2(tile_output_dir, R2_prefix, timestamp_str, sleep_secs)
+            gc.collect()
             
             return True
     finally:
