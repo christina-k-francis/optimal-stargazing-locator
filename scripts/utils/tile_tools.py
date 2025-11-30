@@ -201,7 +201,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             # Reproject into Web Mercator
             slice_2d = slice_2d.rio.reproject("EPSG:3857",
                                             resampling=Resampling.bilinear,
-                                            resolution=300)
+                                            resolution=3000)
             
             # verify the spatial extent after reprojecting
             logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
@@ -214,6 +214,9 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
             # Apply colormap and save as RGB GeoTIFF
             data = slice_2d.values
+            # cleaning up what's no longer needed
+            del slice_2d
+            gc.collect()
             # flip the data vertically
             data = np.flipud(data)
 
