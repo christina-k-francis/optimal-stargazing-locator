@@ -156,12 +156,13 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
         slice_2d = slice_2d.where(slice_2d != -1, np.nan)
         # save timestep date info
         timestamp_str = pd.to_datetime(slice_2d.valid_time.values).strftime('%Y%m%dT%H')
-
         # Handle potential timedelta overflow
         slice_2d = _fix_timedelta_overflow(slice_2d)
 
         # Create temp directory for this timestep
         with tempfile.TemporaryDirectory() as tmpdir:
+            lcc_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}_lcc.tif"
+            webmerc_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}_webmerc.tif"
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}.tif"
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
@@ -178,48 +179,60 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             maxy = 3232111.7107923944
             transform = affine.Affine(dx, 0, minx, 0, -dy, maxy)
 
-            # creating actual Lambert Conformal Conic coordinates (meters)
+            # creating proper Lambert Conformal Conic coordinates (meters)
             ny, nx = slice_2d.shape
             x_coords = minx + np.arange(nx) * dx + dx / 2  
             y_coords = maxy - np.arange(ny) * dy - dy / 2  # y is decreasing
 
             # Reassigning X,Y dims as 1D LCC coordinates
             slice_2d = slice_2d.assign_coords({'x': x_coords, 'y': y_coords})
-
             # drop the 2D geographic coords
             slice_2d = slice_2d.drop_vars(['latitude', 'longitude'], errors='ignore')
-
             # Assign appropriate transform and CRS info.
             slice_2d.rio.write_transform(transform, inplace=True)
             slice_2d.rio.write_crs(ndfd_proj4, inplace=True)
-
             # Set spatial dimensions explicitly
             slice_2d.rio.set_spatial_dims(x_dim='x', y_dim='y', inplace=True)
 
-            # debugging check of spatial extent
-            logger.info(f"Before reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
-            logger.info(f"Before reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
-
-            # Reproject into Web Mercator
-            slice_2d = slice_2d.rio.reproject("EPSG:3857",
-                                            resampling=Resampling.bilinear,
-                                            resolution=3000)
+            # create GeoTIFF in original LCC projection
+            slice_2d.rio.to_raster(lcc_path, dtype='float32')
+            # cleaning up what's no longer needed
+            del slice_2d
             
-            # verify the spatial extent after reprojecting
-            logger.info(f"After reproject - X range: {float(slice_2d.x.min())} to {float(slice_2d.x.max())}")
-            logger.info(f"After reproject - Y range: {float(slice_2d.y.min())} to {float(slice_2d.y.max())}")
+            gc.collect()
+            # using gdalwarp to reproject to web mercator with high accuracy
+            try:
+                subprocess.run([
+                    "gdalwarp",
+                    "-t_srs" "EPSG:3857",
+                    "-r", "cubic", # cubic resampling for smooth result
+                    "-of", "GTiff",
+                    "-co", "TILED=YES",
+                    "-co", "COMPRESS=LZW",
+                    "-dstnodata", "nan",
+                    str(lcc_path),
+                    str(webmerc_path)
+                ], check=True, capture_output=True, text=True)
+                logger.info('Reprojected GeoTIFF to Web Mercator using gdalwarp')
+            except subprocess.CalledProcessError as e:
+                logger.error(f"gdalwarp projection failed: {e.stderr}")
+                raise            
+            
+            # capture reprojected data in an object
+            with rasterio.open(webmerc_path) as src:
+                data = src.read(1)
+                webmerc_transform = src.transform
+                webmerc_crs = src.crs
+
+            # flip the data vertically
+            data = np.flipud(data)
 
             # Verify data isn't all NaN after reprojection
-            if np.all(np.isnan(slice_2d.values)):
+            if np.all(np.isnan(data)):
                 logger.error(f"All NaN values after reprojection at timestep {timestep_idx}")
                 raise ValueError("Reprojection resulted in all NaN values")
 
             # Apply colormap and save as RGB GeoTIFF
-            data = slice_2d.values
-            # flip the data vertically
-            data = np.flipud(data)
-
-            # define min+max values in the dataset
             if vmin is None:
                 vmin = float(np.nanmin(data))
             if vmax is None:
@@ -233,7 +246,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             # Create mask 
             valid_mask = ~np.isnan(data)
 
-            # Check if we have any valid pixels
+            # Check if we don't have any valid pixels
             if not np.any(valid_mask):
                 logger.error(f"No valid pixels at timestep {timestep_idx}")
                 raise ValueError("No valid pixels to render")
@@ -256,24 +269,18 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             rgba_img[:, :, 3] = np.where(valid_mask, 255, 0)
 
             # Build corrected transform for flipped data, top row now has max Y value
-            x_min, x_max = float(slice_2d.x.min()), float(slice_2d.x.max())
-            y_min, y_max = float(slice_2d.y.min()), float(slice_2d.y.max())
+            x_min = webmerc_transform.c
+            y_max = webmerc_transform.f            
+            pixel_width = webmerc_transform.a
+            pixel_height = abs(webmerc_transform.e)
             
-            pixel_width = (x_max - x_min) / data.shape[1]
-            pixel_height = (y_max - y_min) / data.shape[0]
-            
-            # Transform for north-up orientation
+            # Transform for north-up orientation, origin at top-left
             corrected_transform = affine.Affine(
                 pixel_width, 0, x_min,
                 0, -pixel_height, y_max  # Negative height, origin at max Y
             )
-            
-            # cleaning up what's no longer needed
-            del slice_2d
-            gc.collect()
+             
             log_memory_usage(f'before generating GeoTIFF for {timestamp_str}')
-
-            
             # let's generate the rgba geotiff
             with rasterio.open(
                 geo_path,
@@ -283,7 +290,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 width=rgba_img.shape[1],
                 count=4,
                 dtype=rgba_img.dtype,
-                crs="EPSG:3857",
+                crs=webmerc_crs,
                 transform=corrected_transform
             ) as dst:
                 for band in range(4):
@@ -329,7 +336,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
     finally:
         # Force cleanup
         gc.collect()
-        log_memory_usage(f"After timestep {timestep_idx}")
+        log_memory_usage(f"after timestep {timestep_idx}")
 
 def _fix_timedelta_overflow(ds, coord_name='time'):
     """
