@@ -894,9 +894,11 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
         stargazing_ds[var].rio.write_transform(clouds_da.rio.transform(), inplace=True)
     # ensuring chunk alignment
     stargazing_ds = stargazing_ds.chunk(target_chunks)
+    gc.collect() # delete no longer needed data
 
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
+    gc.collect() # delete no longer needed data
 
     logger.info('creating GIF of latest stargazing condition grades forecast')
     create_stargazing_gif(stargazing_ds['grade_num'],
@@ -913,7 +915,7 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger.info(f"Has NaN values: {bool(np.any(np.isnan(stargazing_ds['grade_num'].values)))}")
     # aggressive cleanup before tile generation
     gc.collect()
-    time.sleep(1)  # brief pause to ensure cleanup completes
+    time.sleep(3)  # brief pause to ensure cleanup completes
     log_memory_usage('before generating stargazing tiles')
     
     if skip_stargazing_tiles == False:
