@@ -104,7 +104,7 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     num_steps = ds.sizes['step']
     
     # Process timesteps in parallel
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         # Submit all timesteps
         futures = {executor.submit(
             generate_single_timestep_tiles,
@@ -216,9 +216,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
             # Apply colormap and save as RGB GeoTIFF
             data = slice_2d.values
-            # cleaning up what's no longer needed
-            del slice_2d
-            gc.collect()
             # flip the data vertically
             data = np.flipud(data)
 
@@ -270,7 +267,12 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 pixel_width, 0, x_min,
                 0, -pixel_height, y_max  # Negative height, origin at max Y
             )
+            
+            # cleaning up what's no longer needed
+            del slice_2d
+            gc.collect()
             log_memory_usage(f'before generating GeoTIFF for {timestamp_str}')
+
             
             # let's generate the rgba geotiff
             with rasterio.open(
