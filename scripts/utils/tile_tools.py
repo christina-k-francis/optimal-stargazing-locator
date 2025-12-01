@@ -224,6 +224,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 webmerc_transform = src.transform
                 webmerc_crs = src.crs
 
+            logger.info(f'webmerc crs: {webmerc_crs}')
+
             # flip the data vertically
             data = np.flipud(data)
 
