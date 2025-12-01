@@ -43,7 +43,7 @@ def create_gif_task(ds, colormap, cbar_label, title):
     create_nws_gif(ds, colormap, cbar_label, title)
     return True
 
-@task(log_prints=True, retries=5)
+@task(log_prints=True, retries=2)
 def gen_tiles_task(ds, layer_name, R2_prefix, sleep_secs, cmap, 
                    vmin=None, vmax=None, skip_tiles=False):
     """ generate tiles from a NWS data array """
