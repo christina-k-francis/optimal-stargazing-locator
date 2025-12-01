@@ -204,7 +204,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             try:
                 subprocess.run([
                     "gdalwarp",
-                    "-t_srs" "EPSG:3857",
+                    "-t_srs", "EPSG:3857",
                     "-r", "cubic", # cubic resampling for smooth result
                     "-of", "GTiff",
                     "-co", "TILED=YES",
