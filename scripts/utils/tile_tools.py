@@ -102,6 +102,7 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     logger.info(f"Tileset Date Range: {timesteps[0]} - {timesteps[-1]}")
 
     num_steps = ds.sizes['step']
+    logger.info(f"There are {num_steps} total timesteps")
     
     # Process timesteps in parallel
     with ThreadPoolExecutor(max_workers=4) as executor:
