@@ -104,7 +104,7 @@ def generate_tiles_from_xr(ds, layer_name, R2_prefix, sleep_secs,
     num_steps = ds.sizes['step']
     
     # Process timesteps in parallel
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         # Submit all timesteps
         futures = {executor.submit(
             generate_single_timestep_tiles,
@@ -172,13 +172,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
             )
 
-            # web mercator with spherical geodetic datum
-            spherical_webmerc = (
-                "+proj=merc +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 "
-                "+a=6371200 +b=6371200 +units=m +no_defs"
-            )
-
-            # build the affine and transform
+            # build the transform
             dx = slice_2d.attrs["GRIB_DxInMetres"]
             dy = slice_2d.attrs["GRIB_DyInMetres"]
             minx = -2764474.3507319926
@@ -200,44 +194,13 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             # Set spatial dimensions explicitly
             slice_2d.rio.set_spatial_dims(x_dim='x', y_dim='y', inplace=True)
 
-            # create GeoTIFF in original LCC projection
-            slice_2d.rio.to_raster(lcc_path, dtype='float32')
-            # cleaning up what's no longer needed
-            del slice_2d
-            gc.collect()
-
-            logger.info("Reprojecting from LCC to Web Mercator")
-            # Reproject to spherical web mercator with high accuracy
-            try:
-                subprocess.run([
-                    "gdalwarp",
-                    "-s_srs", ndfd_proj4,
-                    "-t_srs", spherical_webmerc,
-                    "-r", "cubic", # cubic resampling for smooth result
-                    "-of", "GTiff",
-                    "-co", "TILED=YES",
-                    "-co", "COMPRESS=LZW",
-                    "-dstnodata", "nan",
-                    str(lcc_path),
-                    str(webmerc_path)
-                ], check=True, capture_output=True, text=True)
-                logger.info('Reprojected GeoTIFF to Web Mercator using gdalwarp')
-            except subprocess.CalledProcessError as e:
-                logger.error(f"gdalwarp projection failed: {e.stderr}")
-                raise            
+            # get data from the 2d DA
+            data = slice_2d.values
             
-            # capture reprojected data in an object
-            with rasterio.open(webmerc_path) as src:
-                data = src.read(1)
-                webmerc_transform = src.transform
-
-            # flip the data vertically
-            data = np.flipud(data)
-
             # Verify data isn't all NaN after reprojection
             if np.all(np.isnan(data)):
-                logger.error(f"All NaN values after reprojection at timestep {timestep_idx}")
-                raise ValueError("Reprojection resulted in all NaN values")
+                logger.error(f"All NaN values at timestep {timestep_idx}")
+                raise ValueError("All NaN values")
 
             # Apply colormap and save as RGB GeoTIFF
             if vmin is None:
@@ -274,21 +237,9 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             # assigning cmap to RGBA values
             rgba_img = (colormap(norm(data)) * 255).astype("uint8")
             rgba_img[:, :, 3] = np.where(valid_mask, 255, 0)
-
-            # Build corrected transform for flipped data, top row now has max Y value
-            x_min = webmerc_transform.c
-            y_max = webmerc_transform.f            
-            pixel_width = webmerc_transform.a
-            pixel_height = abs(webmerc_transform.e)
-            
-            # Transform for north-up orientation, origin at top-left
-            corrected_transform = affine.Affine(
-                pixel_width, 0, x_min,
-                0, -pixel_height, y_max  # Negative height, origin at max Y
-            )
              
-            log_memory_usage(f'before generating GeoTIFF for {timestamp_str}')
-            # let's generate the rgba geotiff
+            log_memory_usage(f'before generating LCC GeoTIFF for {timestamp_str}')
+            # let's generate the rgba LCC GeoTIFF
             with rasterio.open(
                 geo_path,
                 "w",
@@ -297,8 +248,8 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 width=rgba_img.shape[1],
                 count=4,
                 dtype=rgba_img.dtype,
-                crs=spherical_webmerc,
-                transform=corrected_transform
+                crs=ndfd_proj4,
+                transform=transform
             ) as dst:
                 for band in range(4):
                     dst.write(rgba_img[:, :, band], band + 1)
@@ -321,18 +272,22 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 logger.info(f"Bottom-left corner (-1,0) value: {first_band[-1, 0]}")
             log_memory_usage(f'before generating tiles for {timestamp_str}')
 
-            # now, let's generate tiles from the oriented RGBA GeoTIFF
+            # generating tiles from the RGBA GeoTIFF, automatically reprojected to Web Merc
             try:
                 subprocess.run([
                     "gdal2tiles.py",
                     "--xyz", # explicitly set xyz/slippy tile coords
                     "-z", "0-8",  # Zoom levels
+                    "-r", "lanczos", # reprojection resampling method
+                    "--processes", "4",  # parallel processing
+                    "-v",  # verbose output for debugging
                     str(geo_path),            
                     str(tile_output_dir)      
                 ], check=True, capture_output=True, text=True)
                 logger.info(f"Tiles generated for timestep {timestep_idx+1}")
             except subprocess.CalledProcessError as e:
                 logger.error(f"gdal2tiles failed for timestep {timestep_idx}: {e.stderr}")
+                logger.error(f"gdal2tiles stdout for timestep {timestep_idx}: {e.stdout}"
                 raise
 
             # Now, let's upload tiles to R2
