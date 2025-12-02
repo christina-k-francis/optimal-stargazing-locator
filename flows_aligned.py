@@ -899,11 +899,6 @@ def simplified_stargazing_calc_flow(skip_stargazing_tiles=False):
     logger.info("uploading stargazing evaluation dataset to cloud...")
     upload_zarr_dataset(stargazing_ds, "processed-data/Stargazing_Dataset_Latest.zarr")
     gc.collect() # delete no longer needed data
-
-    logger.info('creating GIF of latest stargazing condition grades forecast')
-    create_stargazing_gif(stargazing_ds['grade_num'],
-                          'Stargazing Grade',
-                          ['A+','A','B','C','D','F']) 
     
     # debugging step before generating tiles
     logger.info(f"Stargazing grades stats:," 
