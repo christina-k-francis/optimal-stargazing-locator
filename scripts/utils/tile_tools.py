@@ -172,6 +172,12 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 "+lon_0=-95 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs"
             )
 
+            # web mercator with spherical geodetic datum
+            spherical_webmerc = (
+                "+proj=merc +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 "
+                "+a=6371200 +b=6371200 +units=m +no_defs"
+            )
+
             # build the affine and transform
             dx = slice_2d.attrs["GRIB_DxInMetres"]
             dy = slice_2d.attrs["GRIB_DyInMetres"]
@@ -198,13 +204,15 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             slice_2d.rio.to_raster(lcc_path, dtype='float32')
             # cleaning up what's no longer needed
             del slice_2d
-            
             gc.collect()
-            # using gdalwarp to reproject to web mercator with high accuracy
+
+            logger.info("Reprojecting from LCC to Web Mercator")
+            # Reproject to spherical web mercator with high accuracy
             try:
                 subprocess.run([
                     "gdalwarp",
-                    "-t_srs", "EPSG:3857",
+                    "-s_srs", ndfd_proj4,
+                    "-t_srs", spherical_webmerc,
                     "-r", "cubic", # cubic resampling for smooth result
                     "-of", "GTiff",
                     "-co", "TILED=YES",
@@ -222,9 +230,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             with rasterio.open(webmerc_path) as src:
                 data = src.read(1)
                 webmerc_transform = src.transform
-                webmerc_crs = src.crs
-
-            logger.info(f'webmerc crs: {webmerc_crs}')
 
             # flip the data vertically
             data = np.flipud(data)
@@ -292,7 +297,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 width=rgba_img.shape[1],
                 count=4,
                 dtype=rgba_img.dtype,
-                crs=webmerc_crs,
+                crs=spherical_webmerc,
                 transform=corrected_transform
             ) as dst:
                 for band in range(4):
