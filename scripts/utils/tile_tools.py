@@ -288,7 +288,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                 logger.info(f"Tiles generated for timestep {timestep_idx+1}")
             except subprocess.CalledProcessError as e:
                 logger.error(f"gdal2tiles failed for timestep {timestep_idx}: {e.stderr}")
-                logger.error(f"gdal2tiles stdout for timestep {timestep_idx}: {e.stdout}"
+                logger.error(f"gdal2tiles stdout for timestep {timestep_idx}: {e.stdout}")
                 raise
 
             # Now, let's upload tiles to R2
