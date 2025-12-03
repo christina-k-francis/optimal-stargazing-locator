@@ -137,6 +137,8 @@ async def head_tile_with_timestamp(layer: str, timestamp: str, z: int, x: int, y
         logger.info(f"Tile found locally at {local_path}")
         return Response(status_code=200)
     
+    # Convert to TMS Y for R2 lookup
+    tms_y = flip_y_coordinate(z,y)
     key = (
         f"{LAYER_PATHS[layer]}/{z}/{x}/{y}.png"
         if layer == "LightPollution_Tiles" and timestamp == "static"
