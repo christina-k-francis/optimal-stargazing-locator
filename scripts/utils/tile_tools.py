@@ -195,8 +195,10 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
             # Set spatial dimensions explicitly
             slice_2d.rio.set_spatial_dims(x_dim='x', y_dim='y', inplace=True)
 
-            # get data from the 2d DA
+            # get data from 2d data array
             data = slice_2d.values
+            # flip the data vertically, so it's rightside up
+            data = np.flipud(data)
             
             # Verify data isn't all NaN after reprojection
             if np.all(np.isnan(data)):
