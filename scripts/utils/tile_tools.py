@@ -162,8 +162,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
 
         # Create temp directory for this timestep
         with tempfile.TemporaryDirectory() as tmpdir:
-            lcc_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}_lcc.tif"
-            webmerc_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}_webmerc.tif"
             geo_path = pathlib.Path(tmpdir) / f"{layer_name}_t{timestep_idx}.tif"
             tile_output_dir = pathlib.Path(tmpdir) / "tiles"
 
@@ -262,18 +260,7 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                                 ColorInterp.blue,
                                 ColorInterp.alpha)
 
-            # Diagnostic step to check the orientation of the GeoTIFF
-            with rasterio.open(geo_path, 'r') as src:
-                logger.info(f"GeoTIFF bounds: {src.bounds}")
-                logger.info(f"GeoTIFF transform: {src.transform}")
-                logger.info(f"Transform origin (top-left): X={src.transform.c}, Y={src.transform.f}")
-                logger.info(f"Y pixel size (should be negative): {src.transform.e}")
-                
-                # Check corner values to verify orientation
-                first_band = src.read(1)
-                logger.info(f"Top-left corner (0,0) value: {first_band[0, 0]}")
-                logger.info(f"Bottom-left corner (-1,0) value: {first_band[-1, 0]}")
-            log_memory_usage(f'before generating tiles for {timestamp_str}')
+            log_memory_usage(f'before generating Web Merc tiles for {timestamp_str}')
 
             # generating tiles from the RGBA GeoTIFF, automatically reprojected to Web Merc
             try:
