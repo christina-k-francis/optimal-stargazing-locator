@@ -280,8 +280,6 @@ def generate_single_timestep_tiles(ds, layer_name, R2_prefix, timestep_idx,
                     "--xyz", # explicitly set xyz/slippy tile coords
                     "-z", "0-8",  # Zoom levels
                     "-r", "lanczos", # reprojection resampling method
-                    "--processes", "4",  # parallel processing
-                    "-v",  # verbose output for debugging
                     str(geo_path),            
                     str(tile_output_dir)      
                 ], check=True, capture_output=True, text=True)
