@@ -1,6 +1,6 @@
 # Optimal Stargazing Locator 🌌
 
-A web application that allows users to see a 6-day forecast of stargazing conditions over any region in the continental United States using 2024 static light pollution data from [David J. Lorenz](https://djlorenz.github.io/astronomy/lp/), meteorological data from the [U.S. National Weather Service](https://digital.weather.gov/), and moon phase and moon altitude data from [NASA's Jet Propulsion Laboratory (JPL)](https://ssd.jpl.nasa.gov/planets/eph_export.html) via the Skyfield python package.  
+A web application that allows users to see a 5-day forecast of stargazing conditions over any region in the continental United States using 2024 static light pollution data from [David J. Lorenz](https://djlorenz.github.io/astronomy/lp/), meteorological data from the [U.S. National Weather Service](https://digital.weather.gov/), and moon phase and moon altitude data from [NASA's Jet Propulsion Laboratory (JPL)](https://ssd.jpl.nasa.gov/planets/eph_export.html) via the Skyfield python package.  
 
 ---
 
